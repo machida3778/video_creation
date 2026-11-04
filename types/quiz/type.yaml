@@ -1,0 +1,21 @@
+id: quiz
+name: 解説つきクイズ
+status: planned
+priority: P1
+description: 問題・ヒント・答え・理由を順に提示し、出典で正解を確認できるタイマー付きクイズ。
+use_when: [科学の三択問題を理由の解説付きで作って, 地理クイズを五秒タイマー付きで作って, 身近な道具の仕組みをクイズにして]
+avoid_when: [答えの根拠が確認できない問題, 正解だけを出して説明しない構成]
+pipeline: data_animation
+timing: fixed
+length:
+  youtube_shorts: {target: 65, max: 90}
+  tiktok: {target: 65, min: 61, max: 90}
+  x: {target: 65, max: 140}
+research: {required: true, min_sources: 1, recency_days: null, source_scope: answer}
+voice: {narrator: [default]}
+components: [hook_title, caption, quiz_timer, choice_cards, answer_reveal, source_card, end_card, bgm, sfx]
+models: [tts, music, foley, asr, vlm]
+params: {questions: 1, timer_sec: 5}
+qa: [duration, loudness, safe_area, yomi, facts, originality, rights]
+risks: [総合リスク：低〜中, 正解や選択肢の曖昧さ, 同じ問題形式の量産, 待ち時間だけによる尺の水増し]
+monetization: 毎回固有の問題と誤答理由を設計し、出典付きの解説で答えに至る考え方を伝える。

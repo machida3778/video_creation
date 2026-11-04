@@ -1,0 +1,20 @@
+/local/
+# per-video work and finished videos (large, generated)
+/runs/
+/outbox/
+# downloaded binaries, engines, model weights
+/tools/
+/models/
+# licensed media is tracked by its manifest, not in git
+/assets/media/
+# environments and caches
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+.uv_cache/
+# logs
+*.log
+# claude local state
+/.claude/hooks/.usage_warned
+/.claude/settings.local.json

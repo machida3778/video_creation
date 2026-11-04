@@ -1,0 +1,68 @@
+# BGM licence registry. Files are downloaded manually in a
+# browser (OpenTracks and BGMer forbid automated/bulk downloads) and saved under assets/media/bgm/
+# (gitignored). Only background use; never Content ID registration or re-upload of the music itself.
+tracks:
+  - id: escort
+    title: Escort
+    artist: もっぴーさうんど
+    file: assets/media/bgm/Escort.mp3
+    license: OpenTracks（旧DOVA-SYNDROME）音源利用ライセンス
+    license_url: https://opentracks.com/help/articles/license/
+    credit: ""
+    commercial_ok: true
+    mood: [解説, ランキング, 落ち着き, 温かい, 優しい, ピアノ, 汎用]
+    length_sec: 127
+  - id: oikakekko_kyahha
+    title: 追いかけっこキャッハー
+    artist: 今川彰人オーケストラ
+    file: assets/media/bgm/追いかけっこキャッハー.mp3
+    license: "OpenTracks（旧DOVA-SYNDROME）音源利用ライセンス（作者条件: 18禁利用禁止）"
+    license_url: https://opentracks.com/help/articles/license/
+    credit: ""
+    commercial_ok: true
+    mood: [面白, 明るい, 騒がしい, 軽快, コメディ]
+    bpm: 167
+    length_sec: 132
+  - id: honey_lemon_350ml
+    title: しゅわしゅわハニーレモン350ml
+    artist: しゃろう
+    file: assets/media/bgm/しゅわしゅわハニーレモン350ml_2.mp3
+    license: OpenTracks（旧DOVA-SYNDROME）音源利用ライセンス
+    license_url: https://opentracks.com/help/articles/license/
+    credit: ""
+    commercial_ok: true
+    mood: [ポップ, 可愛い, 爽やか, 明るい, 雑学, 解説]
+    length_sec: 92   # the downloaded file is Track 2 (loop version)
+  - id: niji_no_nemoto_made
+    title: 虹の根本まで
+    artist: BGMer
+    file: assets/media/bgm/249_BPM118.mp3
+    license: BGMer利用規約
+    license_url: https://bgmer.net/terms/
+    credit: ""
+    commercial_ok: true
+    mood: [ポップ, 楽しい, おしゃれ, クール, 解説, 雑学]
+    bpm: 118
+    length_sec: 112
+  - id: shining_star
+    title: シャイニングスター
+    artist: 森田交一（魔王魂）
+    file: assets/media/bgm/maou_14_shining_star.mp3
+    license: 魔王魂素材利用規約
+    license_url: https://maou.audio/rule/
+    credit: "音楽：魔王魂"
+    commercial_ok: true
+    mood: [ポップ, 明るい, 歌もの, 定番]
+    bpm: 158
+    length_sec: 277  # vocal song: avoid under narration
+
+# Not loaded until identified / licence confirmed.
+# Not used. Policy (2026-11-04): a track must be clearly licensed for YouTube, TikTok AND X; YouTube Audio
+# Library downloads are not, as far as the current terms can be verified (their off-YouTube use is unclear).
+not_used:
+  - {file: "assets/media/bgm/Les Toreadors from Carmen (by Bizet) - Bizet.mp3", source: YouTube Audio Library,
+     reason: "TikTok・X での利用条件が不明確（現在の規約を確認できず、録音の権利者も不明）"}
+  - {file: "assets/media/bgm/Piano Store - Jimmy Fontanez_Media Right Productions.mp3", source: YouTube Audio Library,
+     reason: "TikTok・X での利用条件が不明確（作者側に他プラットフォームの許諾の明示なし）"}
+  - {title: "If I Had a Chicken / Kevin MacLeod", source: YouTube Audio Library,
+     reason: "Audio Library 版は同上。作者公式（incompetech.com, CC BY 4.0、クレジット必須）から取得すれば利用可だが、Content ID の申し立てが付くことがあるため当面は使わない"}

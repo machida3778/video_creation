@@ -1,0 +1,21 @@
+id: data_comparison
+name: 数字でわかる
+status: planned
+priority: P1
+description: 年次・単位・母集団をそろえた数値をアニメーショングラフで比較し、差の意味を解説する。
+use_when: [同じ年の各地域の人口密度を比較して, 電源構成の変化を折れ線で説明して, 公開統計から一人当たりの値を比較して]
+avoid_when: [比較条件をそろえられない数値, 因果関係を裏付けなく断定する依頼]
+pipeline: data_animation
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research: {required: true, min_sources: 1, recency_days: null}
+voice: {narrator: [default]}
+components: [hook_title, caption, chart_bar, chart_line, chart_race, source_card, end_card, bgm]
+models: [tts, music, asr, vlm]
+params: {chart: bar, normalize_units: true, align_years: true}
+qa: [duration, loudness, safe_area, yomi, facts, originality, rights]
+risks: [総合リスク：低〜中, 単位や母集団の取り違え, 軸の操作による誤解, 相関と因果の混同]
+monetization: 毎回独自の比較の問いを立て、計算条件を開示した自作グラフと数値の解釈を加える。

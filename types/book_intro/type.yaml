@@ -1,0 +1,21 @@
+id: book_intro
+name: 本の紹介
+status: planned
+priority: P2
+description: 出版社の情報を確認し、本の代替となる要約を避けて読みどころと独自の視点を紹介する。
+use_when: [この本の読みどころを紹介して, 初心者に向く理由を一冊について説明して, 本のテーマと身近な疑問をつなぐ紹介を作って]
+avoid_when: [本文全体の朗読や詳細な代替要約, 未許諾の表紙画像を使う依頼]
+pipeline: narration_stills
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research: {required: true, min_sources: 1, recency_days: null, required_source: publisher_page}
+voice: {narrator: [default]}
+components: [hook_title, caption, book_card, quote_card, source_card, end_card, bgm]
+models: [tts, music, asr, vlm]
+params: {books: 1, cover_requires_permission: true, minimal_quotation: true}
+qa: [duration, loudness, safe_area, yomi, facts, originality, rights]
+risks: [総合リスク：中, 本文引用や表紙画像の権利侵害, 詳細な要約による原著の代替]
+monetization: 毎回一冊に固有の問いを立て、読者に役立つ独自の論評と読みどころを中心に構成する。

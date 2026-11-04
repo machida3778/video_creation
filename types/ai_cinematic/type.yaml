@@ -1,0 +1,21 @@
+id: ai_cinematic
+name: AIリアル系ショート
+status: planned
+priority: P2
+description: 固有のテーマと展開を持つリアルな生成映像を、ナレーションと音楽でつなぎ、AI生成であることを開示する。
+use_when: [架空の未来都市の一日を映画風に描いて, 想像上の探査機の旅をリアルな映像にして, 架空の建築を巡る短い映像詩を作って]
+avoid_when: [実在人物のなりすまし, 偽ニュースや偽の救出劇, 生成映像であることを隠す依頼]
+pipeline: generated_video
+timing: narration
+length:
+  youtube_shorts: {target: 45, max: 60}
+  tiktok: {target: 65, min: 61, max: 90}
+  x: {target: 45, max: 60}
+research: {required: false}
+voice: {narrator: [default]}
+components: [hook_title, caption, video_clip, end_card, bgm, sfx]
+models: [tts, t2i, i2v, music, foley, asr, vlm, upscale]
+params: {fiction: true, realistic_imagery: true, synthetic_media: true}
+qa: [duration, loudness, safe_area, yomi, originality, rights, disclosure]
+risks: [総合リスク：中〜高, 現実の記録と誤認される生成映像, 実在人物への類似, 汎用映像の羅列による独自性不足]
+monetization: 毎回固有のテーマと視覚的な展開を設計し、専用のショットと語りを編集して一つの作品にする。

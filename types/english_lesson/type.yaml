@@ -1,0 +1,21 @@
+id: english_lesson
+name: 使える英語
+status: planned
+priority: P2
+description: 英語表現の一つの使い分けを、具体的な場面・対比例文・確認問題で教える。
+use_when: [借りると貸すの英語の違いを教えて, 旅行で使う依頼表現を例文付きで説明して, 似た二つの前置詞を確認問題付きで教えて]
+avoid_when: [出典のない万能な文法規則の断定, 試験教材の問題文の転載]
+pipeline: data_animation
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research: {required: false, min_sources: 0, recency_days: null}
+voice: {narrator: [default]}
+components: [hook_title, caption, quote_card, choice_cards, answer_reveal, end_card, bgm]
+models: [tts, music, asr, vlm]
+params: {distinctions: 1, examples: 2, review_questions: 1}
+qa: [duration, loudness, safe_area, yomi, originality, rights]
+risks: [総合リスク：低〜中, 英語発音や用例の誤り, 文脈を無視した使い分け, 定型例文だけの反復]
+monetization: 毎回固有の場面に合わせた対比例文と確認問題を創作し、使い分けの理由を自分の言葉で説明する。

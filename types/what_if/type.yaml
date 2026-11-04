@@ -1,0 +1,21 @@
+id: what_if
+name: もしもの世界
+status: planned
+priority: P2
+description: 架空の前提を明示し、その世界で起こる出来事を創作上の仮説として映像化する。
+use_when: [重力が弱い架空の街の暮らしを描いて, 空に海がある世界を想像して, 一日だけ影が動き出す世界を動画にして]
+avoid_when: [架空の予測を科学的事実として断定する依頼, 実在人物の偽映像]
+pipeline: generated_video
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research: {required: false}
+voice: {narrator: [default]}
+components: [hook_title, caption, video_clip, end_card, bgm, sfx]
+models: [tts, t2i, i2v, music, foley, asr, vlm]
+params: {fiction: true, label_assumptions: true, synthetic_media: true}
+qa: [duration, loudness, safe_area, yomi, originality, rights, disclosure]
+risks: [総合リスク：中, 仮定や創作と事実の混同, 前提と結末の不整合, 類似した世界設定の反復]
+monetization: 毎回異なる仮定から生活の変化と固有の結末を組み立て、専用映像と語りで一貫した思考実験を作る。

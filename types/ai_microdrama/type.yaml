@@ -1,0 +1,21 @@
+id: ai_microdrama
+name: AI短編ドラマ
+status: planned
+priority: P3
+description: オリジナルの人物が選択を迫られ、その選択が結末につながる短編ドラマを生成映像で描く。
+use_when: [忘れ物を届けるロボットの短編を作って, 未来の郵便屋が決断する物語を描いて, 一つの親切が結末につながるドラマを作って]
+avoid_when: [既存作品の登場人物や筋書きの模倣, 実在人物に似せたドラマ]
+pipeline: generated_video
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research: {required: false}
+voice: {narrator: [default]}
+components: [hook_title, caption, video_clip, end_card, bgm, sfx]
+models: [tts, t2i, image_edit, i2v, music, foley, asr, vlm]
+params: {fiction: true, character_consistency: true, synthetic_media: true}
+qa: [duration, loudness, safe_area, yomi, originality, rights, disclosure]
+risks: [総合リスク：中〜高, 人物や場面の連続性の破綻, 既存作品との類似, 定型的な展開の量産]
+monetization: 毎回固有の人物設定と葛藤・選択・結末を創作し、専用ショットと音響で物語として編集する。

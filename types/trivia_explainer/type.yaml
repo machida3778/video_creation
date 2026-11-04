@@ -1,0 +1,21 @@
+id: trivia_explainer
+name: 根拠つき雑学
+status: experimental
+priority: P1
+description: 意外な事実を一つ選び、仕組みと根拠を独自の図とナレーションで解説する。
+use_when: [虹が丸く見える理由を教えて, 缶の底がへこんでいる理由を動画にして, 身近な科学の意外な事実を紹介して]
+avoid_when: [出典を確認できないうわさ, 専門家の判断が必要な医療相談]
+pipeline: narration_stills
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research: {required: true, min_sources: 2, recency_days: null}
+voice: {narrator: [default]}
+components: [hook_title, caption, ken_burns_image, source_card, end_card, bgm]
+models: [tts, t2i, music, asr, vlm]
+params: {claims: 1, realistic_imagery: false}
+qa: [duration, loudness, safe_area, yomi, facts, originality, rights]
+risks: [総合リスク：低〜中, 通説の誤りや過度な単純化, 静止画の使い回しによる独自性不足]
+monetization: 毎回固有の疑問に複数の出典と自作の説明図で答え、独自の検証と解釈を加える。

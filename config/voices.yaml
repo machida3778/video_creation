@@ -1,0 +1,152 @@
+# Voices a request can name (「ずんだもんで」「落ち着いた男性ナレーターで」).
+# Voice licence registry. Re-check each character's linked terms before use;
+# credits go into every video description. VOICEVOX style ids are looked up at runtime from GET /speakers
+# using "キャラ名/スタイル名". Only voices whose terms allow commercial use of outputs are loaded.
+# restricted_content: content the voice's terms forbid; checked against the video type's `content`.
+
+defaults:
+  narrator: vv_suzumatsu          # until the Irodori narrators are auditioned
+  dialogue_a: vv_zundamon
+  dialogue_b: vv_metan
+
+voices:
+  # ---------------- VOICEVOX characters (engine 0.26.0, CPU server)
+  - id: vv_suzumatsu
+    engine: voicevox
+    speed: 1.3          # default short-form narration tempo
+    speaker: 雀松朱司/ノーマル
+    name: 雀松朱司
+    aliases: [雀松朱司, 雀松]
+    gender: male
+    tone: [落ち着いた, 低め, 渋い, 解説]
+    license: VOICEVOX 雀松朱司 利用規約 (VirVox Project)
+    license_url: https://www.virvoxproject.com/voicevoxの利用規約
+    credit: "VOICEVOX:雀松朱司"
+    commercial_ok: true
+    restricted_content: [political, religious, criticism]
+    notes: 犯罪の助長、著しいイメージの毀損、特定の対象への誹謗、音声を使った音響モデルの学習も禁止。
+
+  - id: vv_kurono
+    engine: voicevox
+    speed: 1.3          # default short-form narration tempo
+    speaker: 玄野武宏/ノーマル
+    name: 玄野武宏
+    aliases: [玄野武宏, 玄野]
+    gender: male
+    tone: [明瞭, 若い, 爽やか]
+    license: VOICEVOX 玄野武宏 利用規約 (VirVox Project)
+    license_url: https://www.virvoxproject.com/voicevoxの利用規約
+    credit: "VOICEVOX:玄野武宏"
+    commercial_ok: true
+    restricted_content: [political, religious, criticism]
+
+  - id: vv_himari
+    engine: voicevox
+    speed: 1.3          # default short-form narration tempo
+    speaker: 冥鳴ひまり/ノーマル
+    name: 冥鳴ひまり
+    aliases: [冥鳴ひまり, ひまり]
+    gender: female
+    tone: [落ち着いた, 優しい, 穏やか]
+    license: 冥鳴ひまり 利用規約
+    license_url: https://www.meimeihimari.com/terms-of-use
+    credit: "VOICEVOX:冥鳴ひまり"
+    commercial_ok: true
+    restricted_content: [political, religious]
+    notes: 法人も申請不要で商用可。有害・公序良俗違反、規約で指定された思想・団体での利用は禁止。
+
+  - id: vv_sora
+    engine: voicevox
+    speed: 1.3          # default short-form narration tempo
+    speaker: 九州そら/ノーマル
+    name: 九州そら
+    aliases: [九州そら]
+    gender: female
+    tone: [大人っぽい, 落ち着いた, ナレーション]
+    license: 東北ずん子・ずんだもんプロジェクト 音源利用規約
+    license_url: https://www.zunko.jp/con_ongen_kiyaku.html
+    credit: "VOICEVOX:九州そら"
+    commercial_ok: true
+    restricted_content: [political, religious, criticism, adult]
+
+  - id: vv_metan
+    engine: voicevox
+    speed: 1.3          # default short-form narration tempo
+    speaker: 四国めたん/ノーマル
+    name: 四国めたん
+    aliases: [四国めたん, めたん]
+    gender: female
+    tone: [はっきり, 解説]
+    license: 東北ずん子・ずんだもんプロジェクト 音源利用規約
+    license_url: https://www.zunko.jp/con_ongen_kiyaku.html
+    credit: "VOICEVOX:四国めたん"
+    commercial_ok: true
+    restricted_content: [political, religious, criticism, adult]
+
+  - id: vv_zundamon
+    engine: voicevox
+    speed: 1.3          # default short-form narration tempo
+    speaker: ずんだもん/ノーマル
+    name: ずんだもん
+    aliases: [ずんだもん]
+    gender: neutral
+    tone: [明るい, 元気, キャラクター]
+    role: character
+    license: 東北ずん子・ずんだもんプロジェクト 音源利用規約
+    license_url: https://www.zunko.jp/con_ongen_kiyaku.html
+    credit: "VOICEVOX:ずんだもん"
+    commercial_ok: true
+    restricted_content: [political, religious, criticism, adult]
+    notes: 虚偽情報、情報商材の宣伝も禁止。声の許諾は立ち絵の許諾を含まない（立ち絵は別途）。
+
+  - id: vv_no7
+    engine: voicevox
+    speed: 1.3          # default short-form narration tempo
+    speaker: No.7/ノーマル
+    name: No.7
+    aliases: [No.7, ナンバーセブン]
+    gender: female
+    tone: [力強い, アナウンサー, はっきり]
+    license: No.7 利用規約
+    license_url: https://voiceseven.com/
+    credit: "VOICEVOX:No.7"
+    commercial_ok: true
+    restricted_content: [criticism]
+    notes: 個人・同人の動画の広告収入は明記して許可。法人アカウントなどの商用は要相談。権利侵害・著しいイメージ毀損は禁止。
+
+  # ---------------- narrator engines (lab GPU). pending = reference voice not designed/auditioned yet
+  - id: narrator_male_calm
+    engine: irodori
+    status: pending
+    model: Aratako/Irodori-TTS-v4.1-Small
+    name: 男性ナレーター（落ち着き）
+    aliases: [男性ナレーター, ナレーター（男性）]
+    gender: male
+    tone: [落ち着いた, 低め, ドキュメンタリー, ニュース]
+    role: narrator
+    voice_description: 落ち着いた低めの成人男性。明瞭な標準語。控えめな抑揚。
+    license: MIT (Irodori-TTS v4.1 Small)
+    license_url: https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small
+    commercial_ok: true
+
+  - id: narrator_female_announcer
+    engine: irodori
+    status: pending
+    model: Aratako/Irodori-TTS-v4.1-Small
+    name: 女性ナレーター（アナウンサー風）
+    aliases: [女性アナウンサー, 女性ナレーター, アナウンサー風]
+    gender: female
+    tone: [明瞭, ニュース, 穏やか, フォーマル]
+    role: narrator
+    voice_description: 成人女性のアナウンサー。明瞭な標準語。自然で穏やかな抑揚。
+    license: MIT (Irodori-TTS v4.1 Small)
+    license_url: https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small
+    commercial_ok: true
+
+# Not loaded: terms do not clearly permit this project's intended uses.
+excluded:
+  - {name: 青山龍星, reason: "法人・個人事業主・スポンサー付きの利用は ななはぴ への事前許可が必要"}
+  - {name: Sarashina2.2-TTS, reason: "非商用ライセンス"}
+  - {name: F5-TTS official weights, reason: "CC-BY-NC"}
+  - {name: Fish Speech S1-mini / S2-Pro, reason: "重みが非商用・研究用"}
+  - {name: "AivisHub の ACML-NC モデル", reason: "商用利用を禁止"}

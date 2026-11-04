@@ -1,0 +1,21 @@
+id: map_explainer
+name: 地図でわかる
+status: planned
+priority: P2
+description: 地理の疑問に、利用許諾を確認した地理データと地図アニメーションで答える。
+use_when: [港町が発展した地理的理由を説明して, 二つの都市の距離感を地図で見せて, 山脈と交通路の関係を動画にして]
+avoid_when: [利用許諾のない地図画像, 係争地域の帰属の断定や政治宣伝]
+pipeline: data_animation
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research: {required: true, min_sources: 1, recency_days: null}
+voice: {narrator: [default]}
+components: [hook_title, caption, map_view, source_card, end_card, bgm]
+models: [tts, music, asr, vlm]
+params: {show_scale: true, show_data_date: true}
+qa: [duration, loudness, safe_area, yomi, facts, originality, rights]
+risks: [総合リスク：低〜中, 地図データのライセンス違反, 投影法や距離の誤解, 国境表現への配慮不足]
+monetization: 毎回異なる地理の問いを独自の経路・距離の可視化と根拠付きの説明で解き明かす。

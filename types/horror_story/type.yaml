@@ -1,0 +1,21 @@
+id: horror_story
+name: オリジナル怪談
+status: planned
+priority: P2
+description: 伏線と結末を備えた完全オリジナルの怪談を、イラストと語りと効果音で描く。
+use_when: [誰もいない駅を舞台にした新作怪談を作って, 鏡の違和感が伏線になる怖い話を作って, 最後に意味が変わる不思議な話を書いて]
+avoid_when: [掲示板の体験談の転載朗読, 実在の事件を偽装する依頼, 過度に残虐な描写]
+pipeline: narration_stills
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research: {required: false}
+voice: {narrator: [vv_suzumatsu, default]}
+components: [hook_title, caption, ken_burns_image, end_card, bgm, sfx]
+models: [tts, t2i, music, foley, asr, vlm]
+params: {fiction: true, realistic_imagery: false, graphic_violence: false}
+qa: [duration, loudness, safe_area, yomi, originality, rights]
+risks: [総合リスク：中, 既存怪談との筋書きの類似, 実話と誤認される演出, 過度な恐怖表現]
+monetization: 毎回固有の伏線と結末を創作し、専用の場面イラストと音響で一つの物語を完成させる。

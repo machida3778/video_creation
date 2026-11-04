@@ -1,0 +1,21 @@
+id: chat_story
+name: チャット短編
+status: planned
+priority: P2
+description: 架空の二人の誤解と解決を、チャット画面・音声・反応で描くオリジナル短編。
+use_when: [待ち合わせの勘違いが解けるチャット劇を作って, 一通の誤送信から始まる温かい話を作って, 友人二人のすれ違いと仲直りを短編にして]
+avoid_when: [実在の私信や掲示板投稿の転載, 特定人物への批判やなりすまし]
+pipeline: dialogue
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research: {required: false}
+voice: {a: [vv_zundamon], b: [vv_metan], narrator: [default]}
+components: [hook_title, caption, chat_bubbles, end_card, bgm, sfx]
+models: [tts, music, foley, asr, vlm]
+params: {fiction: true, characters: 2}
+qa: [duration, loudness, safe_area, yomi, originality, rights]
+risks: [総合リスク：中, 私信や投稿の無断転載, 名詞だけを変えた筋書きの反復, キャラクター音声の規約違反]
+monetization: 毎回異なる誤解の原因と人物の選択を創作し、会話の展開と結末に固有の意味を持たせる。

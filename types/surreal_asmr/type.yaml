@@ -1,0 +1,21 @@
+id: surreal_asmr
+name: 非現実ASMR
+status: planned
+priority: P3
+description: 現実にはありえない素材の変化を、連続した生成映像と同期する効果音で表現する無声作品。
+use_when: [ガラスの雲を切る非現実ASMRを作って, 光の布を折る音と映像を作って, 結晶の果物が変化する感覚的な短編を作って]
+avoid_when: [同じ切断映像のループ, 色や素材名だけを変えた量産, 実際に再現できる危険な行為の指南]
+pipeline: generated_video
+timing: fixed
+length:
+  youtube_shorts: {target: 25, max: 35}
+  tiktok: {target: 65, min: 61, max: 75}
+  x: {target: 25, max: 35}
+research: {required: false}
+voice: {}
+components: [hook_title, video_clip, sfx, end_card]
+models: [t2i, i2v, foley, vlm, upscale]
+params: {loop: false, synchronize_foley: true, synthetic_media: true}
+qa: [duration, loudness, safe_area, originality, rights, disclosure]
+risks: [総合リスク：高（繰り返しに陥りやすい）, 単純ループによる独自性不足, 音と映像の同期ずれ, 尺だけを延ばした冗長な展開による品質低下]
+monetization: 毎回固有の素材変化と始まりから結末までの展開を設計し、専用の同期音響と非反復の映像を制作する。

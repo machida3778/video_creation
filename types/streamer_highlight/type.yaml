@@ -1,0 +1,26 @@
+id: streamer_highlight
+name: 実況者・VTuber切り抜き
+status: planned
+priority: P3
+description: 商用利用を含む切り抜き許諾を確認した配信のみを対象に、見どころの背景と独自の解説を加える。
+use_when: [許可リスト内の配信から見どころを文脈付きでまとめて, 切り抜き許諾済みの実況の判断を解説して, 商用利用が許可された配信の名場面に背景説明を付けて]
+avoid_when: [無許可または商用利用不可の配信, 文脈を歪める編集や個人への疑惑, 字幕だけを付けた転載]
+pipeline: clipping
+timing: narration
+length:
+  youtube_shorts: {target: 70, min: 61, max: 90}
+  tiktok: {target: 70, min: 61, max: 90}
+  x: {target: 70, max: 140}
+research:
+  required: true
+  min_sources: 1
+  recency_days: null
+  permission_evidence_required: true
+  required_evidence: [clipping_guidelines, commercial_use_permission, original_stream_url, required_credits]
+voice: {narrator: [default]}
+components: [hook_title, caption, video_clip, source_card, end_card, bgm]
+models: [tts, asr, vlm, music]
+params: {allowlist_only: true, preserve_context: true, add_editorial_commentary: true}
+qa: [duration, loudness, safe_area, yomi, facts, originality, rights, sensitivity]
+risks: [総合リスク：高, 配信やゲーム内素材の権利侵害, 文脈を失う編集による誤解, 許諾があっても再利用コンテンツと判定される可能性]
+monetization: 毎回見どころを独自に選定し、前後の文脈と判断の分析を加えて元配信にはない解説価値を作る。
