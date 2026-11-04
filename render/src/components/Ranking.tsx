@@ -11,7 +11,9 @@ const safeArea: React.CSSProperties = {
 const text: React.CSSProperties = {
   position: 'absolute', left: 30, width: 720, textAlign: 'center', fontWeight: 900,
   overflowWrap: 'anywhere', whiteSpace: 'pre-line', lineHeight: 1.25,
-  textShadow: '0 3px 6px #111, 0 -2px 4px #111',
+  // Outline like the captions (8 directions) so labels stay readable on bright images.
+  textShadow: ['-4px 0', '4px 0', '0 -4px', '0 4px', '-3px -3px', '3px -3px', '-3px 3px', '3px 3px']
+    .map((o) => `${o} 0 #111`).join(', ') + ', 0 4px 10px rgba(0,0,0,0.6)',
 };
 
 export const RankCard: React.FC<{props: RankCardProps}> = ({props}) => {
