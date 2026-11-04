@@ -117,6 +117,9 @@ voices:
   # ---------------- narrator engines (lab GPU). pending = reference voice not designed/auditioned yet
   - id: narrator_male_calm
     engine: irodori
+    # Activate after audition + freeze; set reference to the frozen ref_*.wav directory and retain its seed.
+    # Model: MIT; codec Aratako/Semantic-DACVAE-Japanese-32dim: MIT,
+    # derived from facebook/dacvae-watermarked: Apache-2.0.
     status: pending
     model: Aratako/Irodori-TTS-v4.1-Small
     name: 男性ナレーター（落ち着き）
@@ -131,6 +134,9 @@ voices:
 
   - id: narrator_female_announcer
     engine: irodori
+    # Activate after audition + freeze; set reference to the frozen ref_*.wav directory and retain its seed.
+    # Model: MIT; codec Aratako/Semantic-DACVAE-Japanese-32dim: MIT,
+    # derived from facebook/dacvae-watermarked: Apache-2.0.
     status: pending
     model: Aratako/Irodori-TTS-v4.1-Small
     name: 女性ナレーター（アナウンサー風）

@@ -4,6 +4,8 @@ VOICEVOX (local engine, scripts/setup/voicevox.sh): audio_query gives mora lengt
 phrase spans; spans are scaled to the real WAV length (synthesis adds frame rounding and interrogative
 upspeak that the query does not show). Lines with `yomi` are synthesized from the reading instead of the
 display text.
+Irodori narrators are synthesized in one GPU batch and timed from their WAVs;
+they provide no phrase spans.
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ from pathlib import Path
 
 import httpx
 
+from . import narrator
 from .registry import load_voices
 from .schemas import Asset, LineTiming, Manifest, Script, Span, Timings, VoiceSpec
 
@@ -79,23 +82,30 @@ def wav_seconds(data: bytes) -> float:
 def synthesize(run: Path, script: Script, voices: dict[str, VoiceSpec] | None = None,
                engine: Voicevox | None = None) -> Timings:
     voices = voices or load_voices()
-    engine = engine or Voicevox()
+    effective = {role: voices[script.cast[role]].model_copy(update=script.voice_overrides.get(role, {}))
+                 for role in dict.fromkeys(line.speaker for line in script.lines)}
+    for voice in effective.values():
+        if voice.engine not in ("voicevox", "irodori"):
+            raise NotImplementedError(f"engine {voice.engine} ({voice.id}) is not wired yet")
+    narrator_lines = [line for line in script.lines if effective[line.speaker].engine == "irodori"]
+    narrated = narrator.synthesize(run, narrator_lines, effective) if narrator_lines else {}
     (run / "audio").mkdir(exist_ok=True)
     cursor, lines = LEAD_IN, []
     for line in script.lines:
-        voice = voices[script.cast[line.speaker]]
-        if script.voice_overrides.get(line.speaker):
-            voice = voice.model_copy(update=script.voice_overrides[line.speaker])
-        if voice.engine != "voicevox":
-            raise NotImplementedError(f"engine {voice.engine} ({voice.id}) is not wired yet")
-        style = engine.style_id(voice.speaker)
-        q = engine.query(line.yomi or line.text, style, voice)
-        data = engine.synthesis(q, style)
-        spans, predicted = phrase_spans(q)
+        voice = effective[line.speaker]
+        rel = f"audio/{line.id}.wav"
+        if voice.engine == "irodori":
+            data = Path(narrated[line.id]).read_bytes()
+            spans, predicted = [], 0.0
+        else:
+            engine = engine or Voicevox()
+            style = engine.style_id(voice.speaker)
+            q = engine.query(line.yomi or line.text, style, voice)
+            data = engine.synthesis(q, style)
+            spans, predicted = phrase_spans(q)
+            (run / rel).write_bytes(data)
         actual = wav_seconds(data)
         k = actual / predicted if predicted > 0 else 1.0
-        rel = f"audio/{line.id}.wav"
-        (run / rel).write_bytes(data)
         lines.append(LineTiming(
             line_id=line.id, audio=rel, start=round(cursor, 3), end=round(cursor + actual, 3),
             spans=[Span(text=s.text, start=round(cursor + s.start * k, 3), end=round(cursor + s.end * k, 3))
@@ -113,9 +123,14 @@ def record_voices(manifest: Manifest | None, script: Script, timings: Timings,
     keep = [a for a in manifest.assets if a.kind != "voice"]
     for t in timings.lines:
         v = voices[script.cast[speaker[t.line_id]]]
+        if script.voice_overrides.get(speaker[t.line_id]):
+            v = v.model_copy(update=script.voice_overrides[speaker[t.line_id]])
+        tool = (f"irodori:{v.model or narrator.CHECKPOINT}" if v.engine == "irodori" else
+                f"{v.engine}{':' + engine_version if engine_version else ''}:{v.speaker or v.model}")
         keep.append(Asset(id=f"voice_{t.line_id}", path=t.audio, kind="voice", origin="generated",
-                          tool=f"{v.engine}{':' + engine_version if engine_version else ''}:{v.speaker or v.model}",
-                          params={"voice_id": v.id, "speed": v.speed}, license=v.license,
+                          tool=tool,
+                          params={"voice_id": v.id, "speed": v.speed},
+                          license="MIT" if v.engine == "irodori" else v.license,
                           license_url=v.license_url, commercial_ok=v.commercial_ok, credit=v.credit))
     manifest.assets = keep
     return manifest

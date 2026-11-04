@@ -377,7 +377,8 @@ class VoiceSpec(BaseModel):
     speaker: str | None = None      # VOICEVOX "キャラ名/スタイル名" (style id resolved from GET /speakers)
     model: str | None = None        # HF model id for narrator engines
     voice_description: str | None = None   # voice-design prompt (irodori / qwen3_tts)
-    reference: str | None = None    # frozen reference audio (assets/voices/...), our own or licensed
+    reference: str | None = None    # directory of frozen ref_*.wav (assets/media/voices/...), own or licensed
+    seed: int | None = None         # fixed narrator seed; omitted = stable seed derived from voice id
     name: str                       # display name, e.g. ずんだもん
     aliases: list[str] = []         # words that select this voice in a request
     gender: Literal["male", "female", "neutral"] | None = None
