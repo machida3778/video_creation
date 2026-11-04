@@ -33,7 +33,7 @@
 
 - 答えを出しきってから終える。ループ（終わりが冒頭につながる）にするか、答えで切るかは版を分けて比べる（**暫定**）。
 - 呼びかけ（CTA）は1つまで。
-- 尺は YouTube Shorts 180秒以内、TikTok の収益化を狙う版は61秒以上。尺を満たすためだけの水増しはしない。
+- 尺は YouTube Shorts 180秒以内、TikTok 向けの長めの版は61秒以上。尺を満たすためだけの水増しはしない。
 
 ## タイトル・説明・表紙
 
@@ -44,7 +44,7 @@
 ## AI生成コンテンツ
 
 - 生成した素材は、写実的かどうかを全部記録し、写実的なものがあれば開示フラグを付ける（[YouTube](https://support.google.com/youtube/answer/14328491)、[TikTok](https://support.tiktok.com/en/using-tiktok/creating-videos/ai-generated-content)）。
-- 1本ごとの固有の価値（独自の問い・説明の筋道）を人が確認できる形で残す。量産・使い回しに見える動画は収益化の対象外になる（[YouTube の方針](https://support.google.com/youtube/answer/1311392)）。
+- 1本ごとの固有の価値（独自の問い・説明の筋道）を人が確認できる形で残す。量産・使い回しに見える動画はプラットフォームの方針で評価されない（[YouTube の方針](https://support.google.com/youtube/answer/1311392)）。
 
 ## 効果測定（今後）
 
