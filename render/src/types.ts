@@ -9,6 +9,19 @@ export type Clip = {
   props: Record<string, unknown>;
 };
 
+export type RankCardProps = {rank: number; label: string; value?: string; bar?: number; color?: string};
+export type CountdownProps = {from: number; to: number};
+export type RankScrollProps = {
+  items: {rank: number; label: string; src?: string}[];
+  speed?: number; // pixels per second; negative reverses direction
+};
+export type CharacterPairProps = {
+  a: {name: string; src: string; color: string};
+  b: {name: string; src: string; color: string};
+  roles?: {a: string; b: string}; // script roles; timeline assembly fills speaking
+  speaking: {speaker: 'a' | 'b'; start: number; end: number}[];
+};
+
 export type Caption = {
   start: number;
   end: number;

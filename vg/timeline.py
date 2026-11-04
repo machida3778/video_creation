@@ -11,9 +11,33 @@ from __future__ import annotations
 from .captions import captions_for_line
 from .registry import load_style
 from .sfx import asset_id, events
-from .schemas import AudioClip, Caption, Clip, Manifest, Script, Storyboard, Timeline, Timings
+from .schemas import AudioClip, Caption, Clip, Line, LineTiming, Manifest, Script, Storyboard, Timeline, Timings
 
 TAIL = 0.5  # seconds after the last line
+
+
+def _character_props(component: str, props: dict, line_ids: list[str], lines: dict[str, Line],
+                     by_line: dict[str, LineTiming], start: float) -> dict:
+    """Fill clip-local speaking intervals without modifying the storyboard's props."""
+    result = dict(props)
+    if component != "character_pair":
+        return result
+    roles = result.get("roles")
+    if (not isinstance(roles, dict) or set(roles) != {"a", "b"}
+            or not all(isinstance(role, str) and role for role in roles.values())
+            or roles["a"] == roles["b"]):
+        raise ValueError("character_pair requires distinct script roles: {a: role, b: role}")
+    speakers = {role: speaker for speaker, role in roles.items()}
+    speaking = []
+    for lid in line_ids:
+        role = lines[lid].speaker
+        if role not in speakers:
+            raise ValueError(f"character_pair: line {lid} speaker '{role}' is missing from props.roles")
+        timing = by_line[lid]
+        speaking.append({"speaker": speakers[role], "start": round(timing.start - start, 6),
+                         "end": round(timing.end - start, 6)})
+    result["speaking"] = speaking
+    return result
 
 
 def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifest | None = None,
@@ -52,13 +76,20 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
             if ref not in assets:
                 raise ValueError(f"scene {sc.id}: asset '{ref}' not in manifest")
             props["src"] = assets[ref]
-        clips.append(Clip(start=start, end=end, layer=0, component=sc.component, props=props))
+        props = _character_props(sc.component, props, sc.line_ids, lines, by_line, start)
+        scene_clips = [Clip(start=start, end=end, layer=0, component=sc.component, props=props)]
         for ov in sc.props.get("overlays", []):
-            clips.append(Clip(start=start, end=end, layer=1, component=ov["component"], props=ov.get("props", {})))
+            overlay_props = _character_props(ov["component"], ov.get("props", {}), sc.line_ids, lines, by_line, start)
+            scene_clips.append(Clip(start=start, end=end, layer=1, component=ov["component"], props=overlay_props))
+        clips.extend(scene_clips)
+        scene_role_style = dict(role_style)
+        for clip in scene_clips:
+            if clip.component == "character_pair":
+                scene_role_style.update({role: f"speaker_{speaker}" for speaker, role in clip.props["roles"].items()})
         if sc.props.get("captions", True):
             for lid in sc.line_ids:
                 line = lines[lid]
-                style = sc.caption_style or role_style.get(line.speaker, "default")
+                style = sc.caption_style or scene_role_style.get(line.speaker, "default")
                 captions.extend(captions_for_line(line, by_line[lid], style))
 
     audio = [AudioClip(start=t.start, src=t.audio, kind="voice") for t in timings.lines] + effects

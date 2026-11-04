@@ -1,0 +1,34 @@
+# VOICEVOX voice licences do not cover character art. These are our own original
+# characters, with portraits to be generated locally, never franchise character art.
+# Portrait files are gitignored; this registry stores recipes, not generated assets.
+# On use, copy the portrait into the run, record character_art in assets/manifest.json
+# with model, prompt, seed and licence, and retain the voice's required credit separately.
+characters:
+  - id: ponka
+    name: ポンカ
+    role: questioner
+    voice_id: vv_zundamon
+    color: '#2f7d32'
+    portrait: assets/media/characters/ponka.png
+    prompt: >-
+      Original anime-style mascot portrait of a curious round tawny flying squirrel,
+      oversized amber eyes, short fluffy ears, a teal neckerchief with a single round
+      wooden clasp, tiny paws raised in curiosity, friendly inquisitive expression,
+      centered head and shoulders, clean bold outlines, soft cel shading, plain light
+      cream background, no text, no logos, no resemblance to existing franchise characters.
+    seed: 41001
+    license: 'generated (Z-Image Turbo, Apache-2.0)'
+  - id: ririmo
+    name: リリモ
+    role: explainer
+    voice_id: vv_metan
+    color: '#b0306a'
+    portrait: assets/media/characters/ririmo.png
+    prompt: >-
+      Original anime-style mascot portrait of a small lavender pangolin scholar,
+      rounded overlapping scales, bright dark eyes, round copper glasses, a simple
+      plum vest with a cream collar, calm warm smile, one small paw lifted to explain,
+      centered head and shoulders, clean bold outlines, soft cel shading, plain light
+      cream background, no text, no logos, no resemblance to existing franchise characters.
+    seed: 41002
+    license: 'generated (Z-Image Turbo, Apache-2.0)'

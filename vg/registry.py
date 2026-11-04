@@ -13,6 +13,7 @@ VOICES_FILE = ROOT / "config" / "voices.yaml"
 BGM_FILE = ROOT / "config" / "bgm.yaml"
 STYLE_FILE = ROOT / "config" / "style.yaml"
 SFX_FILE = ROOT / "config" / "sfx.yaml"
+CHARACTERS_FILE = ROOT / "config" / "characters.yaml"
 PREFERENCES_FILE = ROOT / "local" / "preferences.yaml"
 LEGACY_PREFERENCES_FILE = ROOT / "config" / "preferences.yaml"
 
@@ -116,6 +117,40 @@ def load_voices(path: Path = VOICES_FILE) -> dict[str, VoiceSpec]:
         if voice_id not in voices:
             raise ValueError(f"default {role} -> unknown voice {voice_id}")
     return voices
+
+
+def load_characters(path: Path | None = None) -> dict[str, dict]:
+    """Original portrait recipes keyed by id. Loading never opens or generates portrait media."""
+    import re
+    from pathlib import PurePosixPath
+
+    path = Path(path) if path is not None else CHARACTERS_FILE
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict) or not isinstance(data.get("characters"), list):
+        raise ValueError(f"{path}: expected characters: [...]")
+    voices = load_voices()
+    characters = {}
+    fields = ("id", "name", "role", "voice_id", "color", "portrait", "prompt", "license")
+    for item in data["characters"]:
+        if not isinstance(item, dict) or not all(isinstance(item.get(k), str) and item[k].strip() for k in fields):
+            raise ValueError(f"{path}: character requires nonempty strings for {fields}")
+        key = item["id"]
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", key) or key in characters:
+            raise ValueError(f"{path}: invalid or duplicate character id {key!r}")
+        if item["role"] not in ("questioner", "explainer"):
+            raise ValueError(f"{key}: role must be questioner or explainer")
+        if item["voice_id"] not in voices:
+            raise ValueError(f"{key}: unknown voice_id {item['voice_id']!r}")
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", item["color"]):
+            raise ValueError(f"{key}: color must be #RRGGBB")
+        if type(item.get("seed")) is not int or item["seed"] < 0:
+            raise ValueError(f"{key}: seed must be a nonnegative integer")
+        portrait = PurePosixPath(item["portrait"])
+        if (portrait.is_absolute() or ".." in portrait.parts
+                or portrait.parts[:3] != ("assets", "media", "characters") or portrait.suffix != ".png"):
+            raise ValueError(f"{key}: portrait must be a PNG under assets/media/characters/")
+        characters[key] = dict(item)
+    return characters
 
 
 GENDER_WORDS = {"male": ("男性", "男の", "男声", "おじさん", "青年", "少年"),

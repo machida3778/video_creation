@@ -1,9 +1,9 @@
 id: dialogue_explainer
 name: 掛け合い解説
-status: planned
+status: experimental
 priority: P1
 description: 聞き役の疑問に解説役が図と根拠で答え、誤解を解く二人の会話を構成する。
-use_when: [ずんだもんと四国めたんで雲のでき方を説明して, 聞き役が疑問を挟む科学解説を作って, 二人の会話で単位の違いを教えて]
+use_when: [オリジナルの二人で雲のでき方を説明して, 聞き役が疑問を挟む科学解説を作って, 二人の会話で単位の違いを教えて]
 avoid_when: [特定対象への批判や政治・宗教活動, 立ち絵の許諾がないキャラクター利用]
 pipeline: dialogue
 timing: narration
@@ -13,7 +13,7 @@ length:
   x: {target: 70, max: 140}
 research: {required: true, min_sources: 2, recency_days: null}
 voice: {questioner: [vv_zundamon], explainer: [vv_metan]}
-components: [hook_title, caption, character_pair, ken_burns_image, source_card, end_card, bgm]
+components: [hook_title, character_pair, ken_burns_image, source_card, end_card]
 models: [tts, t2i, music, asr, vlm]
 params: {realistic_imagery: false, check_character_art_license: true}
 qa: [duration, loudness, safe_area, yomi, facts, originality, rights]

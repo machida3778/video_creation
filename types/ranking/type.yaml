@@ -1,6 +1,6 @@
 id: ranking
 name: データで見るランキング
-status: planned
+status: experimental
 priority: P1
 description: 出典と比較条件をそろえた数値で順位付けし、各順位の理由と指標の限界を説明する。
 use_when: [人口密度の上位五地域を比較して, 公開統計で再生可能エネルギー比率を順位付けして, カウントダウン形式でデータを紹介して]
@@ -13,9 +13,9 @@ length:
   x: {target: 70, max: 140}
 research: {required: true, min_sources: 1, recency_days: null, source_scope: per_dataset}
 voice: {narrator: [default]}
-components: [hook_title, caption, rank_card, rank_scroll, countdown, source_card, end_card, bgm]
-models: [tts, music, asr, vlm]
-params: {style: scroll, items: 5, allowed_styles: [scroll, countdown]}
+components: [hook_title, ken_burns_image, rank_card, rank_scroll, countdown, source_card, end_card]
+models: [tts, t2i, music, asr, vlm]
+params: {style: countdown, items: 5, allowed_styles: [scroll, countdown]}
 qa: [duration, loudness, safe_area, yomi, facts, originality, rights]
 risks: [総合リスク：中, 比較条件や集計の不一致, 順位だけを流す量産的な構成]
 monetization: 毎回指標の選定理由と計算過程を示し、各順位への固有の解説と比較の限界を加える。

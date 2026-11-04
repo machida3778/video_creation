@@ -1,7 +1,9 @@
 import React from 'react';
 import {AbsoluteFill, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
-import type {Clip} from '../types';
+import type {CharacterPairProps, Clip, CountdownProps, RankCardProps, RankScrollProps} from '../types';
 import {CaptionLines, FONT} from './Caption';
+import {CharacterPair} from './CharacterPair';
+import {Countdown, RankCard, RankScroll} from './Ranking';
 
 type P = Record<string, unknown>;
 const str = (v: unknown, d = '') => (typeof v === 'string' ? v : d);
@@ -108,7 +110,8 @@ const Placeholder: React.FC<{name: string}> = ({name}) => (
   </AbsoluteFill>
 );
 
-export const COMPONENTS = ['background', 'ken_burns_image', 'video_clip', 'title_card', 'hook_title', 'end_card', 'source_card'];
+export const COMPONENTS = ['background', 'ken_burns_image', 'video_clip', 'title_card', 'hook_title', 'end_card', 'source_card',
+  'rank_card', 'countdown', 'rank_scroll', 'character_pair'];
 
 export const ClipView: React.FC<{clip: Clip; frames: number}> = ({clip, frames}) => {
   const p = clip.props ?? {};
@@ -125,6 +128,14 @@ export const ClipView: React.FC<{clip: Clip; frames: number}> = ({clip, frames})
       return <TitleCard props={p} />;
     case 'source_card':
       return <SourceCard props={p} />;
+    case 'rank_card':
+      return <RankCard props={p as RankCardProps} />;
+    case 'countdown':
+      return <Countdown props={p as CountdownProps} />;
+    case 'rank_scroll':
+      return <RankScroll props={p as RankScrollProps} />;
+    case 'character_pair':
+      return <CharacterPair props={p as CharacterPairProps} />;
     default:
       return <Placeholder name={clip.component} />;
   }
