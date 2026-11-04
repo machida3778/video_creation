@@ -1,5 +1,7 @@
 # video_creation
 
+[![CI](https://github.com/machida3778/video_creation/actions/workflows/ci.yml/badge.svg)](https://github.com/machida3778/video_creation/actions/workflows/ci.yml)
+
 An agentic harness that turns a one-line request into a finished vertical short video using open-weights models on your own GPUs. Agents write structured specifications; deterministic tools render and check the result. The harness prepares multiple candidates so a human can select the final version.
 
 The initial implemented recipe is a Japanese trivia explainer. Additional recipes describe planned formats, including dialogue, data comparisons and short fiction.

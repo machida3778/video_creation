@@ -4,14 +4,34 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 
 from .schemas import STAGE_MODELS
 
 ROOT = Path(__file__).resolve().parents[1]
-FFMPEG = ROOT / "tools/ffmpeg/bin/ffmpeg"
-FFPROBE = ROOT / "tools/ffmpeg/bin/ffprobe"
+
+
+def _resolve_tool(name: str) -> Path:
+    variable = f"VG_{name.upper()}"
+    override = os.environ.get(variable)
+    if override:
+        return Path(override)
+    bundled = ROOT / "tools" / "ffmpeg" / "bin" / name
+    if bundled.is_file():
+        return bundled
+    system = shutil.which(name)
+    if system:
+        return Path(system)
+    raise FileNotFoundError(
+        f"Cannot find {name}: set {variable}, install it in tools/ffmpeg/bin/, "
+        "or install it on PATH."
+    )
+
+
+FFMPEG = _resolve_tool("ffmpeg")
+FFPROBE = _resolve_tool("ffprobe")
 _SECRET_NAMES = {"OPENAI_API_KEY", "GEMINI_API_KEY", "ARK_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY"}
 
 
