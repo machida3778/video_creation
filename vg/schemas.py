@@ -9,6 +9,7 @@ Times are seconds on the final video's clock; paths are relative to the run dire
 from __future__ import annotations
 
 from typing import Any, Literal
+import warnings
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -175,6 +176,59 @@ class Storyboard(Spec):
     type_id: str
     scenes: list[Scene] = Field(min_length=1)
     music: Music | None = None
+
+
+def visible_chars(text: str) -> int:
+    return sum(not char.isspace() for char in text)
+
+
+class CoverOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+    template: Literal["question", "reveal", "ranking"]
+    text: str
+    emphasis: list[str] = []
+    badge: str | None = None
+    image: str = Field(min_length=1)
+    line_id: str = Field(min_length=1)
+    palette: Literal["yellow", "red", "white"]
+    ai_generated: bool
+    photorealistic: bool
+
+    @model_validator(mode="after")
+    def _headline(self):
+        if self.id == "sheet":
+            raise ValueError("cover id 'sheet' is reserved for the contact sheet")
+        lines = self.text.split("\n")
+        chars = visible_chars(self.text)
+        if not 1 <= chars <= 20 or len(lines) > 3 or any(not line.strip() for line in lines):
+            raise ValueError("cover headline requires 1–20 visible chars and 1–3 nonempty lines")
+        if any(ord(char) < 32 and char != "\n" for char in self.text):
+            raise ValueError("cover headline contains control characters")
+        if chars > 12:
+            warnings.warn("cover headline exceeds recommended 12 visible chars", UserWarning, stacklevel=2)
+        if self.badge is not None and self.template != "ranking":
+            raise ValueError("badge is only allowed for ranking")
+        if self.badge is not None and (not self.badge.strip() or "\n" in self.badge):
+            raise ValueError("badge must be a nonempty single line")
+        if any(not word or word not in self.text for word in self.emphasis):
+            raise ValueError("emphasis words must occur in the headline")
+        return self
+
+
+class Covers(Spec):
+    options: list[CoverOption] = Field(min_length=1, max_length=3)
+
+    @model_validator(mode="after")
+    def _unique(self):
+        ids = [option.id for option in self.options]
+        if len(set(ids)) != len(ids):
+            raise ValueError("duplicate cover ids")
+        files = [f"{option.id}{suffix}" for option in self.options for suffix in
+                 (".jpg", "_120.jpg", "_180.jpg", "_3x4.jpg", "_4x5.jpg", "_1x1.jpg")]
+        if len(set(files)) != len(files):
+            raise ValueError("cover ids collide with preview filenames")
+        return self
 
 
 # ---------------------------------------------------------------- assets
@@ -398,5 +452,5 @@ class VoiceSpec(BaseModel):
 STAGE_MODELS = {
     "brief": Brief, "route": Route, "research": Research, "script": Script, "factcheck": FactCheck,
     "timings": Timings, "storyboard": Storyboard, "manifest": Manifest, "timeline": Timeline,
-    "qa": QAReport, "publish": Publish,
+    "qa": QAReport, "publish": Publish, "covers": Covers,
 }

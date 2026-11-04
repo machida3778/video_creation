@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import unicodedata
 
 from PIL import Image
 
@@ -36,11 +37,70 @@ def covers(run_dir: Path) -> None:
     """Extract a vertical cover at 0.5 s and a small preview for human review."""
     cover = run_dir / "cover.jpg"
     cover.unlink(missing_ok=True)
-    run([str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-ss", "0.5", "-i",
-         str(run_dir / "final.mp4"), "-vf", "scale=1080:1920,setsar=1", "-frames:v", "1",
-         "-q:v", "2", str(cover)])
+    (run_dir / "cover.png").unlink(missing_ok=True)
+    if (run_dir / "covers.json").is_file():
+        from .thumbnail import selected_cover
+        chosen = selected_cover(run_dir)
+        shutil.copy2(run_dir / "thumbs" / f"{chosen}.jpg", cover)
+        png = run_dir / "thumbs" / f"{chosen}.png"
+        if png.is_file():
+            shutil.copy2(png, run_dir / "cover.png")
+    else:
+        run([str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-ss", "0.5", "-i",
+             str(run_dir / "final.mp4"), "-vf", "scale=1080:1920,setsar=1", "-frames:v", "1",
+             "-q:v", "2", str(cover)])
     with Image.open(cover) as image:
         image.resize((360, 640), Image.Resampling.LANCZOS).save(run_dir / "cover_small.jpg", quality=90)
+
+
+def x_length(text: str) -> int:
+    return sum(2 if unicodedata.east_asian_width(char) in ("W", "F") else 1 for char in text)
+
+
+def _truncate(text: str, limit: int, length=len) -> str:
+    if length(text) <= limit:
+        return text
+    result = ""
+    for char in text:
+        if length(result + char + "…") > limit:
+            break
+        result += char
+    return result + "…" if limit >= length("…") else result
+
+
+def post_kit(destination: Path, publish: Publish) -> Path:
+    kit = destination / "post_kit"
+    kit.mkdir(exist_ok=True)
+    # Keep tags valid and bounded even for independently supplied publish metadata.
+    tags = list(dict.fromkeys("#" + re.sub(r"[^\w]", "", tag)[:24]
+                              for tag in publish.hashtags if re.sub(r"[^\w]", "", tag)))[:5]
+    for fallback in ("#ショート動画", "#解説", "#動画"):
+        if len(tags) >= 3:
+            break
+        if fallback not in tags:
+            tags.append(fallback)
+    # At least three complete hashtags must fit alongside the X title.
+    while x_length(" ".join(tags)) > 180:
+        tags = ["#" + tag[1:13] for tag in tags[:3]]
+    tag_text = " ".join(tags)
+    sentence = re.split(r"(?<=[。！？.!?])|\n", publish.description.strip(), maxsplit=1)[0]
+    title = _truncate(publish.title.replace("\n", " "), 100)
+    tiktok = title + "\n" + _truncate(sentence, max(0, 2200 - len(title) - len(tag_text) - 2)) + "\n" + tag_text
+    x = _truncate(title, 280 - x_length(tag_text) - 1, x_length) + "\n" + tag_text
+    (kit / "tiktok.txt").write_text(tiktok, encoding="utf-8")
+    (kit / "x.txt").write_text(x, encoding="utf-8")
+    shutil.copy2(destination / "cover.jpg", kit / "cover_tiktok.jpg")
+    run([str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-i", str(destination / "cover.jpg"),
+         "-vf", "crop=1080:1440:(iw-ow)/2:(ih-oh)/2,setsar=1", "-frames:v", "1", "-threads", "1",
+         "-q:v", "2", str(kit / "cover_tiktok_3x4.jpg")])
+    instructions = ("1. 人が選んだ final.mp4 を TikTok / X の投稿画面で選びます。\n"
+                    "2. tiktok.txt / x.txt を貼り、表紙を選び、切り取り見本を確認します。\n"
+                    "3. publish.json の出典・必須クレジットも確認し、投稿先で表示してください。\n"
+                    "4. 公開範囲と内容を人が確認して投稿します。\n")
+    if publish.synthetic_media:
+        instructions += "AI生成コンテンツを含みます。投稿先のAIラベル・合成メディア開示を有効にしてください。\n"
+    (kit / "README.txt").write_text(instructions, encoding="utf-8")
+    return kit
 
 
 def package(run_dir) -> Path:
@@ -75,7 +135,9 @@ def package(run_dir) -> Path:
     publish = Publish(title=script.title, description="\n\n".join(parts),
                       search_query=script.search_query, hashtags=_hashtags(brief, script, type_name),
                       platforms=brief.platforms,
-                      synthetic_media=needs_disclosure(manifest),
+                      synthetic_media=needs_disclosure(manifest) or (
+                          (run_dir / "covers.json").is_file() and any(
+                              c.ai_generated and c.photorealistic for c in load(run_dir, "covers").options)),
                       music_track=board.music.track if board and board.music else None)
     save(run_dir, "publish", publish)
     report = write_report(run_dir, [check_metadata(run_dir)])
@@ -87,6 +149,19 @@ def package(run_dir) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     for name in ("final.mp4", "final.srt", "publish.json", "cover.jpg", "cover_small.jpg"):
         shutil.copy2(run_dir / name, destination / name)
+    (destination / "cover.png").unlink(missing_ok=True)
+    if (run_dir / "covers.json").is_file():
+        # Replace stale candidates when packaging the same variant again.
+        shutil.rmtree(destination / "thumbs", ignore_errors=True)
+        shutil.copytree(run_dir / "thumbs", destination / "thumbs")
+        for name in ("covers.json", "covers_report.json", "cover.png"):
+            if (run_dir / name).is_file():
+                shutil.copy2(run_dir / name, destination / name)
+    else:
+        shutil.rmtree(destination / "thumbs", ignore_errors=True)
+        for name in ("covers.json", "covers_report.json"):
+            (destination / name).unlink(missing_ok=True)
+    post_kit(destination, publish)
     return destination
 
 
@@ -130,6 +205,16 @@ def compare(run: Path, *, outbox: Path | None = None) -> Path:
                         f"- BGM: {music}\n"
                         f"- シーン数: {len(board.scenes)}\n"
                         f"- QA: {'合格' if report.passed else '不合格'} — {checks}")
+        if (packaged / "covers.json").is_file():
+            from .thumbnail import selected_cover
+            chosen = selected_cover(packaged)
+            options = load(packaged, "covers").options
+            sections.append("表紙候補（最終選択は人が行います）: " + " / ".join(
+                (f"[{c.id}: {c.text.replace(chr(10), ' ')}]({variant.name}/thumbs/{c.id}.jpg)"
+                 if (packaged / "thumbs" / f"{c.id}.jpg").is_file()
+                 else f"{c.id}: {c.text.replace(chr(10), ' ')}（未出力・要修正）") +
+                f"（回収: {c.line_id}{'・現在の表紙' if c.id == chosen else ''}）" for c in options) +
+                f"\n\n[一覧]({variant.name}/thumbs/sheet.jpg) / [手動投稿キット]({variant.name}/post_kit/README.txt)")
     sections.append("## 組み合わせの頼み方\n\n"
                     "例: 「v2のBGMを用いてv3の動画に合わせ、合成音声はv1」\n\n"
                     f"```sh\nvg mix {shlex.quote(str(run))} --base v3 --bgm v2 --voice v1\n```\n\n"

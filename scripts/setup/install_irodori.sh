@@ -17,7 +17,12 @@ if ! git -C "$DIR" cat-file -e "$COMMIT^{commit}" 2>/dev/null; then
 fi
 git -C "$DIR" checkout -q "$COMMIT"
 echo "irodori: $(git -C "$DIR" log --oneline -1)"
-(builtin cd "$DIR" && uv sync --extra cu128 --python /usr/bin/python3)
+# Python 3.11: upstream pins sentencepiece<0.2, whose 0.1.99 has prebuilt wheels only up to cp311
+# (building it from source needs cmake/pkg-config). uv fetches a managed CPython 3.11 when needed.
+if [[ -x $DIR/.venv/bin/python ]] && ! "$DIR/.venv/bin/python" -c 'import sys; sys.exit(sys.version_info[:2] != (3, 11))'; then
+  rm -rf -- "$DIR/.venv"  # environment from an earlier attempt with another Python
+fi
+(builtin cd "$DIR" && uv sync --extra cu128 --python 3.11)
 "$DIR/.venv/bin/python" -c 'import irodori_tts, torch; print("irodori ok, torch", torch.__version__)'
 # Weights for offline GPU jobs (shared Hugging Face cache).
 "$DIR/.venv/bin/python" -c '

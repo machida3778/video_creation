@@ -2,6 +2,10 @@
 
 `script.json`、`timings.json`、`config/characters.yaml` を読んでから `Storyboard` を書く。`type_id: dialogue_explainer`。全行を順番に、重複なくシーンに割り当てる。
 
+## 表紙の候補
+
+`docs/THUMBNAILS.md` に従い、`covers.json` に主張または構図の異なる3案を `Covers.options` として書く。各案に id・template（question / reveal / ranking）・text・emphasis・badge（rankingだけ）・image（manifestの画像ID）・line_id（約束を回収する台詞）・palette（yellow / red / white）・ai_generated・photorealistic を記録する。見出しは8〜12字、最大20字・3行。長い場合は文字を削る。主役の画像にキャラクターの肖像を使ってもよい。
+
 ## 背景と二人
 
 - **全シーン**（フック・締めを含む）のベースは `ken_burns_image`。1〜2行ごと、2〜4秒程度でシーンを変え、話題に合う背景画像を使う。ズーム・パン・構図を2〜3秒ごとに変え、意味のある変化なしに6秒以上続けない。

@@ -2,6 +2,10 @@
 
 `script.json`、`research.json`、`timings.json` を読んでから `Storyboard` を書く。`type_id: ranking`。シーンの `line_ids` は台本の全行を順番に、重複なくカバーする。数値・順位を台本と必ず一致させる。
 
+## 表紙の候補
+
+`docs/THUMBNAILS.md` に従い、`covers.json` に主張または構図の異なる3案を `Covers.options` として書く。各案に id・template（question / reveal / ranking）・text・emphasis・badge（rankingだけ）・image（manifestの画像ID）・line_id（約束を回収する台詞）・palette（yellow / red / white）・ai_generated・photorealistic を記録する。見出しは8〜12字、最大20字・3行。長い場合は文字を削る。
+
 ## シーンの割り方
 
 - **フック**: 0秒目から主役の `ken_burns_image` と、指標・件数の短い `hook_title` オーバーレイ（`background: false`）。タイトルが字幕を兼ねるときだけ `captions: false`。比較条件は早めに表示する。

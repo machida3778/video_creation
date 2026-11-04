@@ -55,7 +55,7 @@ def clone(run: Path, source: str, *, vid: str | None = None, note: str = "") -> 
     files = {a.path: local_file(original, a.path) for a in entries}
     destination = runs.new_variant(run, vid=vid, note=note)
     try:
-        for name in ("script", "storyboard", "factcheck"):
+        for name in ("script", "storyboard", "factcheck", "covers"):
             if (original / f"{name}.json").is_file():
                 save(destination, name, load(original, name))
         for relative, file in files.items():

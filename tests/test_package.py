@@ -60,7 +60,7 @@ class PackageTests(unittest.TestCase):
         destination = package(self.run)
         self.assertEqual(destination, self.root / "outbox" / "synthetic")
         self.assertEqual({p.name for p in destination.iterdir()},
-                         {"final.mp4", "final.srt", "publish.json", "cover.jpg", "cover_small.jpg"})
+                         {"final.mp4", "final.srt", "publish.json", "cover.jpg", "cover_small.jpg", "post_kit"})
         for name in ("final.mp4", "final.srt", "publish.json", "cover.jpg", "cover_small.jpg"):
             self.assertEqual((destination / name).read_bytes(), (self.run / name).read_bytes())
         for name, dimensions in [("cover.jpg", (1080, 1920)), ("cover_small.jpg", (360, 640))]:

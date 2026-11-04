@@ -2,6 +2,10 @@
 
 `timings.json` で行ごとの時間が決まってから書く。シーンは台本の行を順番に、重複なく全部カバーする。
 
+## 表紙の候補
+
+`docs/THUMBNAILS.md` に従い、`covers.json` に主張または構図の異なる3案を `Covers.options` として書く。各案に id・template（question / reveal / ranking）・text・emphasis・badge（rankingだけ）・image（manifestの画像ID）・line_id（約束を回収する台詞）・palette（yellow / red / white）・ai_generated・photorealistic を記録する。見出しは8〜12字、最大20字・3行。長い場合は文字を削る。
+
 ## シーンの割り方
 
 - **C01 フック**: 1行目だけ。0秒目から印象の強い画像（`ken_burns_image`、ズームは速めに `[1.0, 1.2]`）に、`overlays` で問いの `title_card`（`background: false`）を重ねる。字幕と重複するので `captions: false`。

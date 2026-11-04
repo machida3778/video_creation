@@ -11,6 +11,9 @@
   vg mix RUN --base v3 [--script vX] [--voice v1] [--visuals v3] [--bgm v2]
   vg bgm list | suggest RUN [--n 3]
   vg compare RUN
+  vg thumbnail RUN[:vN]            render cover options and crop previews
+  vg publish auth youtube         authorize the optional official YouTube uploader
+  vg publish youtube RUN:vN --confirm [--privacy private|unlisted|public] [--at ISO8601] [--dry-run]
   vg analyze VIDEO [--json PATH]    measure pixels/audio and write a six-frame contact sheet
   vg sfx build                     synthesize the original local sound-effect library
   vg feedback RUN "<text>" [--variant vN] | vg feedback RUN --show
@@ -246,6 +249,16 @@ def main(argv: list[str] | None = None) -> int:
     suggest.add_argument("run")
     suggest.add_argument("--n", type=int, default=3)
     sub.add_parser("compare").add_argument("run")
+    sub.add_parser("thumbnail").add_argument("run")
+    publish = sub.add_parser("publish").add_subparsers(dest="publish_cmd", required=True)
+    publish.add_parser("auth").add_argument("service", choices=["youtube"])
+    youtube = publish.add_parser("youtube")
+    youtube.add_argument("run")
+    youtube.add_argument("--confirm", action="store_true")
+    youtube.add_argument("--privacy", choices=["private", "unlisted", "public"], default="private")
+    youtube.add_argument("--at")
+    youtube.add_argument("--dry-run", action="store_true")
+    youtube.add_argument("--force", action="store_true")
     analyze = sub.add_parser("analyze")
     analyze.add_argument("video")
     analyze.add_argument("--json", type=Path)
@@ -258,6 +271,28 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("smoke")
     a = p.parse_args(argv)
 
+    if a.cmd == "publish":
+        from . import publish_youtube
+        try:
+            if a.publish_cmd == "auth":
+                publish_youtube.authorize()
+                print("YouTube OAuth authorized")
+                return 0
+            chosen = runs.resolve(a.run)
+            if chosen.parent.name != "variants":
+                raise ValueError("publishing requires a human-chosen variant: RUN:vN")
+            if not a.confirm:
+                print(json.dumps(publish_youtube.preview(chosen, a.privacy, a.at, force=a.force),
+                                 ensure_ascii=False, indent=2))
+                print("Publication requires explicit --confirm", file=sys.stderr)
+                return 1
+            result = publish_youtube.upload(chosen, privacy=a.privacy, publish_at=a.at,
+                                            dry_run=a.dry_run, force=a.force)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        except (ValueError, FileNotFoundError, ImportError) as exc:
+            print(f"YouTube: {exc}", file=sys.stderr)
+            return 1
     if a.cmd == "new":
         print(runs.new_run(a.request, a.slug))
         return 0
@@ -289,6 +324,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{track.id}\t{track.title}\t{track.artist}\t{', '.join(track.mood)}\t{track.bpm}\t{track.length_sec}")
         return 0
     run = runs.resolve(a.run)
+    if a.cmd == "thumbnail":
+        from .thumbnail import thumbnail
+        print(thumbnail(run))
+        return 0
     if a.cmd == "yomi":
         return cmd_yomi(run, a.approve)
     if a.cmd == "variant":

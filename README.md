@@ -83,6 +83,19 @@ Disclose AI-generated content when required by the platform or context. Review f
 
 Generated content is not stored in this repository. Production scripts, research, images, audio and video remain in ignored local directories.
 
+公開するのは人が選んだ版だけです。YouTube は無料の公式 YouTube Data API v3 と OAuth を使い、明示的な投稿依頼と `--confirm` がある場合だけアップロードします。TikTok / X は `outbox/<run>/<vid>/post_kit/` の文章と表紙を使って手動で投稿します。
+
+```sh
+# Optional publish extra is required only for OAuth / an actual upload.
+uv run vg publish auth youtube
+uv run vg publish youtube RUN:v2 --confirm --privacy private --dry-run
+uv run vg publish youtube RUN:v2 --confirm --privacy public
+```
+
+OAuth 用のデスクトップアプリのクライアント情報は Git 管理外の `local/youtube/client_secret.json` に置きます。認証URLが表示されたら、ローカルPCから `ssh -L 8765:127.0.0.1:8765 <server>` で転送してブラウザで開きます。トークンは `local/youtube/token.json` に保存されます。日時指定は `--privacy private --at 2027-01-01T09:00:00+09:00`、再アップロードは意図した場合だけ `--force` を付けます。
+
+表紙は [サムネイルの指針](docs/THUMBNAILS.md) に沿って `covers.json` に記述し、`uv run vg thumbnail RUN:v2` で生成します。`covers_report.json` の `chosen_id` に合格した案のIDを指定すると、その表紙をパッケージと投稿に使います。未指定なら最初の合格案です。`vg compare RUN` の比較表から一覧・縮小・切り取り見本を確認し、人が最終選択してください。
+
 ## 日本語
 
 一行の依頼から縦型ショート動画の候補を作るエージェント用ハーネスです。LLM が JSON 仕様を作り、VOICEVOX・Remotion・ffmpeg などが音声合成、描画、品質検査を行います。生成モデルは自前 GPU 上のオープンウェイトのみを使用し、有料モデル API は使いません。

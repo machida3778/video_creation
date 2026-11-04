@@ -242,7 +242,7 @@ sys.exit(7 if sys.argv[sys.argv.index("-p") + 1] == "/make-video fail" else 0)
         self.assertEqual(result.returncode, 0, result.stderr)
         argv = shlex.split(result.stdout)
         self.assertIn("/make-video " + request, argv)
-        self.assertIn(f"Bash({self.repo}/.venv/bin/vg:*)", argv)
+        self.assertIn(f"Bash({self.repo}/.venv/bin/vg make:*)", argv)
         self.assertNotIn("$REPO", result.stdout)
         self.assertIn("180m", argv)
         self.assertIn("acceptEdits", argv)
@@ -265,8 +265,8 @@ sys.exit(7 if sys.argv[sys.argv.index("-p") + 1] == "/make-video fail" else 0)
         self.assertTrue({"Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch", "Agent"} <= set(tools))
         for tool in tools:
             if tool.startswith("Bash("):
-                self.assertTrue(tool.startswith(("Bash(.venv/bin/vg:", "Bash($REPO/.venv/bin/vg:",
-                                                "Bash(uv run vg:", "Bash(ls:", "Bash(cat:",
+                self.assertTrue(tool.startswith(("Bash(.venv/bin/vg ", "Bash($REPO/.venv/bin/vg ",
+                                                "Bash(uv run vg ", "Bash(ls:", "Bash(cat:",
                                                 "Bash(head:", "Bash(tail:", "Bash(rg:"))
                                 or tool == "Bash(pwd)", tool)
         config.pop("max_minutes")
