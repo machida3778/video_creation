@@ -7,6 +7,7 @@
 /models/
 # licensed media is tracked by its manifest, not in git
 /assets/media/
+/assets/sfx/
 # environments and caches
 .venv/
 __pycache__/

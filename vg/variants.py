@@ -8,6 +8,7 @@ import shutil
 from . import run as runs
 from .media import load, save
 from .schemas import Manifest, Script, Storyboard
+from .sfx import asset_id, events
 
 PARTS = ("script", "voice", "visuals", "bgm")
 
@@ -125,6 +126,8 @@ def mix(run: Path, base: str, script: str | None = None, voice: str | None = Non
 
     refs = {scene.visual.ref for scene in board.scenes if scene.visual.ref}
     refs.update(_refs([scene.props for scene in board.scenes]))
+    refs.update(asset_id(effect_id) for scene in board.scenes if scene.line_ids
+                for effect_id, _ in events(scene.props.get("sfx")))
     visual_assets = _manifest(sources["visuals"])
     missing = refs - {a.id for a in visual_assets.assets}
     if missing:

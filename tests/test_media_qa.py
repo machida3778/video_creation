@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from vg import media, qa
 from vg.render import loudnorm, write_srt
-from vg.schemas import Brief, Caption, Check, Length, QAReport, Route, Timeline
+from vg.schemas import Brief, Caption, Check, Length, Line, LineTiming, Manifest, QAReport, Route, Script, Timeline, Timings
 
 
 class MediaQATests(unittest.TestCase):
@@ -36,7 +36,11 @@ class MediaQATests(unittest.TestCase):
                 loudnorm(raw, directory / "final.mp4")
             media.save(directory, "brief", Brief(request="テスト", topic="テスト", max_sec=4))
             media.save(directory, "timeline", Timeline(duration=3.2, clips=[], captions=[
-                Caption(start=0.1, end=2.5, text="テスト字幕")]))
+                Caption(start=0.1, end=3.0, text="テスト字幕")]))
+            media.save(directory, "script", Script(title="合成テスト", lines=[Line(id="L1", text="あ" * 24)]))
+            media.save(directory, "timings", Timings(sample_rate=48000, total_sec=3.2,
+                       lines=[LineTiming(line_id="L1", audio="test.wav", start=0.1, end=3.1)]))
+            media.save(directory, "manifest", Manifest())
         cls.make_clip(cls.quiet, size="320x240", volume="0.02")
 
     @classmethod
@@ -56,9 +60,11 @@ class MediaQATests(unittest.TestCase):
         media.run(cmd)
 
     def test_good_media_checks(self):
-        checks = qa.run_checks(self.good)
+        checks = qa.run_checks(self.good, runs_root=self.root / "empty_runs")
         self.assertEqual({c.id for c in checks}, {"format", "duration", "loudness", "black_frames",
-                                                "silence", "safe_area", "caption_timing"})
+                                                "silence", "safe_area", "caption_timing", "hook", "tempo",
+                                                "speech_rate", "caption_coverage", "originality", "disclosure",
+                                                "sfx_density"})
         for check in checks:
             with self.subTest(check=check.id):
                 self.assertTrue(check.passed, check.detail)

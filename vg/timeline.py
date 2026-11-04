@@ -9,6 +9,8 @@ Asset ids (visual.ref, props.src_asset) resolve to paths through assets/manifest
 from __future__ import annotations
 
 from .captions import captions_for_line
+from .registry import load_style
+from .sfx import asset_id, events
 from .schemas import AudioClip, Caption, Clip, Manifest, Script, Storyboard, Timeline, Timings
 
 TAIL = 0.5  # seconds after the last line
@@ -33,10 +35,18 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
     # Proportional variant remaps may retain scenes with no lines when the new script is shorter.
     scenes = [sc for sc in board.scenes if sc.line_ids]
     starts = [0.0] + [by_line[sc.line_ids[0]].start for sc in scenes[1:]]
-    clips, captions = [], []
+    clips, captions, effects = [], [], []
+    sfx_gain = load_style()["sfx_gain_db"]
     for i, sc in enumerate(scenes):
         start, end = starts[i], (starts[i + 1] if i + 1 < len(starts) else duration)
-        props = {k: v for k, v in sc.props.items() if k not in ("overlays", "captions")}
+        props = {k: v for k, v in sc.props.items() if k not in ("overlays", "captions", "sfx")}
+        for effect_id, offset in events(sc.props.get("sfx")):
+            key = asset_id(effect_id)
+            if key not in assets or not any(a.id == key and a.kind == "sfx" for a in manifest.assets):
+                raise ValueError(f"scene {sc.id}: SFX '{effect_id}' not in manifest")
+            if start + offset >= end:
+                raise ValueError(f"scene {sc.id}: SFX offset {offset} outside scene duration {end-start}")
+            effects.append(AudioClip(start=start + offset, src=assets[key], kind="sfx", gain_db=sfx_gain))
         ref = sc.visual.ref or props.pop("src_asset", None)
         if ref:
             if ref not in assets:
@@ -51,7 +61,7 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
                 style = sc.caption_style or role_style.get(line.speaker, "default")
                 captions.extend(captions_for_line(line, by_line[lid], style))
 
-    audio = [AudioClip(start=t.start, src=t.audio, kind="voice") for t in timings.lines]
+    audio = [AudioClip(start=t.start, src=t.audio, kind="voice") for t in timings.lines] + effects
     if board.music and board.music.asset:
         if board.music.asset not in assets:
             raise ValueError(f"music asset '{board.music.asset}' not in manifest")

@@ -10,6 +10,9 @@ import unicodedata
 from . import registry
 from .media import FFMPEG, load, probe, run, save
 from .schemas import Check, QAReport, Timeline
+from .analyze import analyze_run, scene_changes, interval_stats
+from .disclosure import realistic_assets
+from . import run as runs
 
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|inf|nan)"
 
@@ -145,11 +148,108 @@ def check_caption_timing(timeline, duration=None) -> Check:
                         f"(required 0.6s), overlaps={overlaps}, outside 0..{duration:.3f}s={outside}")
 
 
-def run_checks(run_dir) -> list[Check]:
+def check_hook(metrics, style) -> Check:
+    text, speech = metrics["first_text_sec"], metrics["first_speech_sec"]
+    return Check(id="hook", passed=text is not None and speech is not None
+                 and 0 <= text <= style["first_text_max_sec"] and 0 <= speech <= style["first_speech_max_sec"],
+                 redo_stage="storyboard", detail=f"first text={text}s (max {style['first_text_max_sec']:g}s); "
+                 f"first speech={speech}s (max {style['first_speech_max_sec']:g}s)")
+
+
+def check_tempo(run_dir, metrics, style) -> Check:
+    longest = metrics["visual_intervals"]["max_sec"]
+    try:
+        changes = scene_changes(_final(run_dir))
+        detected = interval_stats(changes, metrics["duration"])
+        timestamps = ",".join(f"{t:.3f}" for t in changes)
+        secondary = (f"scene threshold=0.30, changes={len(changes)}, timestamps=[{timestamps}]s, "
+                     f"longest={detected['max_sec']:.3f}s")
+    except (RuntimeError, ValueError, OSError) as exc:
+        # Pixel detection is supplementary and cannot change a specification-based decision.
+        secondary = f"scene detection unavailable ({type(exc).__name__})"
+    return Check(id="tempo", passed=longest <= style["max_static_sec"] + 1e-6,
+                 redo_stage="storyboard", detail=f"spec longest hold={longest:.3f}s "
+                 f"(max {style['max_static_sec']:g}s); secondary: {secondary}")
+
+
+def check_speech_rate(metrics, style) -> Check:
+    rate = metrics["speech_cps"]
+    return Check(id="speech_rate", passed=rate >= style["min_speech_cps"], severity="warn", redo_stage="tts",
+                 detail=f"display characters={metrics['speech_characters']}, speech={metrics['speech_seconds']:.3f}s; "
+                 f"rate={rate:.3f} cps (min {style['min_speech_cps']:g})")
+
+
+def check_caption_coverage(metrics, style) -> Check:
+    coverage = metrics["caption_coverage"]
+    return Check(id="caption_coverage", passed=coverage >= style["caption_coverage_min"] - 1e-9,
+                 severity="warn", redo_stage="timeline", detail=f"caption/title coverage={coverage:.4f} "
+                 f"(min {style['caption_coverage_min']:g}); duration={metrics['duration']:.3f}s")
+
+
+def _run_parent(path: Path) -> Path:
+    return path.parent.parent if path.parent.name == "variants" else path
+
+
+def _trigrams(text: str) -> set[str]:
+    # Preserve a meaningful comparison for identical scripts shorter than three characters.
+    return {text[i:i+3] for i in range(len(text)-2)} if len(text) >= 3 else {text} if text else set()
+
+
+def check_originality(run_dir, *, runs_root: Path | None = None, style=None) -> Check:
+    style = registry.load_style() if style is None else style
+    root = runs.RUNS if runs_root is None else Path(runs_root)
+    run_dir = Path(run_dir).resolve()
+    current = _trigrams("".join(line.text for line in load(run_dir, "script").lines))
+    highest, compared = 0.0, 0
+    for path in sorted([*root.glob("*/script.json"), *root.glob("*/variants/*/script.json")]):
+        if _run_parent(path.parent.resolve()) == _run_parent(run_dir):
+            continue
+        if _run_parent(path.parent.resolve()).name.endswith("-smoke"):
+            continue  # fixed smoke-test fixture, identical on purpose
+        other = _trigrams("".join(line.text for line in load(path.parent, "script").lines))
+        union = current | other
+        similarity = len(current & other) / len(union) if union else 0.0
+        highest = max(highest, similarity)
+        compared += 1
+    return Check(id="originality", passed=highest <= style["originality_max_similarity"], redo_stage="script",
+                 detail=f"max character-3-gram Jaccard={highest:.4f} "
+                 f"(max {style['originality_max_similarity']:g}); compared scripts={compared}")
+
+
+def check_disclosure(run_dir) -> Check:
+    ids = realistic_assets(load(run_dir, "manifest"))
+    exists = (Path(run_dir) / "publish.json").is_file()
+    flag = load(run_dir, "publish").synthetic_media if exists else None
+    # Packaging creates this flag automatically. Only an existing hand-made false flag blocks QA.
+    return Check(id="disclosure", passed=not ids or flag is not False, redo_stage="package",
+                 detail=f"realistic image/video assets={len(ids)}; synthetic_media={flag}; "
+                 + ("publish present" if exists else f"publish pending; package sets synthetic_media={bool(ids)}"))
+
+
+def check_sfx_density(timeline, style=None) -> Check:
+    style = registry.load_style() if style is None else style
+    times = sorted(a.start for a in _timeline(timeline).audio if a.kind == "sfx")
+    left, highest = 0, 0
+    for right, t in enumerate(times):
+        # Half-open windows [start, start+10): effects exactly 10s apart do not coincide.
+        while t - times[left] >= 10:
+            left += 1
+        highest = max(highest, right - left + 1)
+    return Check(id="sfx_density", passed=highest <= style["sfx_max_per_10s"], severity="warn",
+                 redo_stage="storyboard", detail=f"effects={len(times)}; max starts per 10s={highest} "
+                 f"(max {style['sfx_max_per_10s']})")
+
+
+def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
     info = probe(_final(run_dir))
+    style = registry.load_style()
+    metrics = analyze_run(run_dir)
     return [check_format(run_dir, info), check_duration(run_dir, info), check_loudness(run_dir),
             check_black_frames(run_dir, info), check_silence(run_dir, info), check_safe_area(run_dir),
-            check_caption_timing(run_dir, _duration(info))]
+            check_caption_timing(run_dir, _duration(info)), check_hook(metrics, style),
+            check_tempo(run_dir, metrics, style), check_speech_rate(metrics, style),
+            check_caption_coverage(metrics, style), check_originality(run_dir, runs_root=runs_root, style=style),
+            check_disclosure(run_dir), check_sfx_density(run_dir, style)]
 
 
 def write_report(run_dir, checks) -> QAReport:

@@ -7,6 +7,7 @@ from .media import ROOT, load, save
 from .schemas import Publish
 from . import registry, run as runs
 from .variants import metadata
+from .disclosure import needs_disclosure
 
 
 def package(run_dir) -> Path:
@@ -33,8 +34,7 @@ def package(run_dir) -> Path:
     board = load(run_dir, "storyboard") if (run_dir / "storyboard.json").is_file() else None
     publish = Publish(title=script.title, description="\n\n".join(parts),
                       hashtags=[c for c in brief.constraints if c.startswith("#")], platforms=brief.platforms,
-                      synthetic_media=any(a.origin == "generated" and a.kind in ("image", "video")
-                                          and a.params.get("realistic") is True for a in manifest.assets),
+                      synthetic_media=needs_disclosure(manifest),
                       music_track=board.music.track if board and board.music else None)
     save(run_dir, "publish", publish)
     destination = (ROOT / "outbox" / run_dir.parent.parent.name / run_dir.name

@@ -5,14 +5,37 @@ from pathlib import Path
 
 import yaml
 
-from .schemas import BgmTrack, TypeSpec, VoiceSpec
+from .schemas import BgmTrack, SfxSpec, Style, TypeSpec, VoiceSpec
 
 ROOT = Path(__file__).resolve().parents[1]
 TYPES_DIR = ROOT / "types"
 VOICES_FILE = ROOT / "config" / "voices.yaml"
 BGM_FILE = ROOT / "config" / "bgm.yaml"
+STYLE_FILE = ROOT / "config" / "style.yaml"
+SFX_FILE = ROOT / "config" / "sfx.yaml"
 PREFERENCES_FILE = ROOT / "local" / "preferences.yaml"
 LEGACY_PREFERENCES_FILE = ROOT / "config" / "preferences.yaml"
+
+
+def load_style(path: Path | None = None) -> dict:
+    """Validated tempo rules, with defaults for absent files and omitted keys."""
+    path = Path(path) if path is not None else STYLE_FILE
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    return Style.model_validate({} if data is None else data).model_dump()
+
+
+def load_sfx(path: Path | None = None) -> dict[str, SfxSpec]:
+    path = Path(path) if path is not None else SFX_FILE
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    effects = {}
+    for item in data.get("effects", []):
+        effect = SfxSpec.model_validate(item)
+        if effect.id in effects:
+            raise ValueError(f"duplicate SFX id {effect.id}")
+        effects[effect.id] = effect
+    return effects
 
 
 def load_bgm(path: Path | None = None) -> dict[str, BgmTrack]:

@@ -37,7 +37,7 @@ Spawn a fresh general-purpose subagent with only `research.json` and `script.jso
 Follow `types/<type>/prompts/storyboard.md`. Scenes must cover every line exactly once, in order, using only components the renderer knows (`render/src/components/registry.tsx` COMPONENTS). Scenes with `visual.kind: t2i` get images from `vg assets RUN` (Z-Image Turbo on an idle lab GPU, recorded in `assets/manifest.json` with prompt, seed and licence). If no lab GPU is idle, wait and retry later, or fall back to backgrounds and say so in the report.
 
 ## 8. Assets, render, QA, package
-`vg make RUN --from assets` (assets → timeline → render → qa → package). When QA fails, read `RUN/qa.json`, go back to the failing check's `redo_stage`, fix, and rerun from there (at most 2 retries per check). After packaging, look at a contact sheet of the final video (a few frames) before reporting.
+`vg make RUN --from assets` (assets → timeline → render → qa → package). When QA fails, read `RUN/qa.json`, go back to the failing check's `redo_stage`, fix, and rerun from there (at most 2 retries per check). After packaging, run `vg sheet RUN:vN` and `vg analyze RUN:vN/final.mp4` for each candidate; inspect the contact sheet and the timing/audio summary before reporting (use `RUN` directly for a run without variants).
 
 ## 8b. Variants (always; local/preferences.yaml `delivery`)
 Produce **3 variants** of every video so the user can choose (the user decides and uploads; never publish).

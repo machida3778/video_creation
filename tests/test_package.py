@@ -68,7 +68,19 @@ class PackageTests(unittest.TestCase):
         publish = load(package(self.run), "publish")
         self.assertEqual(publish.description, "冒頭の説明")
         self.assertEqual(publish.hashtags, [])
-        self.assertFalse(publish.synthetic_media)
+        self.assertTrue(publish.synthetic_media)
+
+    def test_prompt_disclosure_and_nonvisual_assets(self):
+        save(self.run, "qa", QAReport(checks=[Check(id="format", passed=True)]))
+        common = dict(origin="generated", license="test", commercial_ok=True)
+        for kind, params, expected in [("image", {"prompt": "CINEMATIC PHOTO of a synthetic object"}, True),
+                                        ("video", {"prompt": "photoreal rendering"}, True),
+                                        ("voice", {"realistic": True, "prompt": "photo"}, False),
+                                        ("image", {"prompt": "flat vector illustration"}, False)]:
+            with self.subTest(kind=kind, params=params):
+                save(self.run, "manifest", Manifest(assets=[Asset(id="synthetic", path="test", kind=kind,
+                                                                params=params, **common)]))
+                self.assertEqual(load(package(self.run), "publish").synthetic_media, expected)
 
     def test_missing_deliverable_does_not_publish(self):
         save(self.run, "qa", QAReport(checks=[Check(id="format", passed=True)]))

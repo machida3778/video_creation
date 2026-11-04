@@ -271,6 +271,36 @@ class Publish(Spec):
 
 
 # ---------------------------------------------------------------- registries (types/, config/voices.yaml)
+class Style(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    first_text_max_sec: float = Field(0.3, ge=0)
+    first_speech_max_sec: float = Field(0.3, ge=0)
+    max_static_sec: float = Field(3.5, gt=0)
+    min_speech_cps: float = Field(7.0, ge=0)
+    caption_coverage_min: float = Field(0.85, ge=0, le=1)
+    originality_max_similarity: float = Field(0.6, ge=0, le=1)
+    sfx_gain_db: float = -14
+    sfx_max_per_10s: int = Field(3, ge=0)
+
+
+class SfxSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+    file: str
+    license: str
+    commercial_ok: bool
+
+    @model_validator(mode="after")
+    def _commercial_file(self):
+        from pathlib import PurePosixPath
+        path = PurePosixPath(self.file)
+        if path.is_absolute() or ".." in path.parts or path.parts[:2] != ("assets", "sfx") or len(path.parts) < 3:
+            raise ValueError("SFX file must be a path under assets/sfx/")
+        if not self.commercial_ok:
+            raise ValueError(f"{self.id}: not usable commercially")
+        return self
+
+
 class BgmTrack(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")

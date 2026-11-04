@@ -31,7 +31,9 @@ Speech precedes storyboard timing so scene durations follow actual narration. Ea
 
 ## QA gates
 
-Implemented deterministic checks cover media format, duration, loudness and true peak, black frames, long silence, caption safe area and caption timing. Blocking failures stop packaging; warnings remain visible in comparison reports.
+Implemented deterministic checks cover media format, duration, loudness and true peak, black frames, long silence, caption safe area and caption timing. `config/style.yaml` also sets hook timing, maximum visual holds, speech rate, caption/title coverage, character-3-gram script originality and SFX density. Originality compares other runs, excluding all variants of the current run. Realistic image/video assets require synthetic-media disclosure; packaging sets the flag from manifest metadata and prompts, and QA catches an existing false flag. Blocking failures stop packaging; warnings remain visible in comparison reports.
+
+`vg analyze VIDEO --json PATH` measures arbitrary local video, including scene changes, visual hold intervals, EBU R128 loudness, audio activity above −35 dBFS and a six-frame JPEG contact sheet. Hook/tempo QA uses specification timing; pixel-based scene detection is supplementary. `vg sfx build` creates original procedural WAVs in ignored `assets/sfx/`; assets used by a storyboard are copied into its run and licensed in its manifest using `config/sfx.yaml`.
 
 Agents also review facts, pronunciation, visual coherence, originality, licences and AI-content disclosure. ASR-based pronunciation checking and automated visual/factual review are extension points, not current machine checks. Passing technical QA does not replace human editorial review.
 

@@ -18,6 +18,7 @@ from .run import ROOT
 from . import registry, site
 from .schemas import Asset, BgmTrack, Manifest, Storyboard
 from .variants import local_file
+from .sfx import asset_id, events
 
 # bf16 models need Ampere or newer; eligible hosts are configured per site.
 T2I = {  # docs/MODELS.md: t2i first choice. ~21 GB of weights: < 40 GB cards use model CPU offload.
@@ -96,6 +97,31 @@ def generate(run: Path, board: Storyboard, manifest: Manifest | None = None, *,
              bgm_tracks: dict[str, BgmTrack] | None = None, library_root: Path | None = None) -> Manifest:
     """Generate the storyboard's images, set each t2i scene's visual.ref, and return the updated manifest."""
     manifest = manifest or Manifest()
+    used_sfx = dict.fromkeys(effect_id for sc in board.scenes if sc.line_ids
+                            for effect_id, _ in events(sc.props.get("sfx")))
+    if used_sfx:
+        effects = registry.load_sfx()
+        for effect_id in used_sfx:
+            if effect_id not in effects:
+                raise ValueError(f"unknown SFX {effect_id!r} in {registry.SFX_FILE}")
+            effect = effects[effect_id]
+            key = asset_id(effect_id)
+            copied = next((a for a in manifest.assets if a.id == key and a.kind == "sfx"), None)
+            if copied and (run / copied.path).is_file():
+                local_file(run, copied.path)
+                continue
+            try:
+                source = local_file(Path(library_root) if library_root is not None else ROOT, effect.file)
+            except FileNotFoundError as exc:
+                raise FileNotFoundError(f"SFX {effect_id} is missing; run vg sfx build first") from exc
+            relative = f"assets/sfx/{effect_id}.wav"
+            target = run / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            manifest.assets = [a for a in manifest.assets if a.id != key]
+            manifest.assets.append(Asset(id=key, path=relative, kind="sfx", origin="generated", tool="vg sfx",
+                                         params={"effect": effect_id}, license=effect.license,
+                                         commercial_ok=effect.commercial_ok))
     # Resolve music before scheduling any GPU work, so missing library files fail cheaply.
     if board.music and board.music.track:
         tracks = registry.load_bgm() if bgm_tracks is None else bgm_tracks

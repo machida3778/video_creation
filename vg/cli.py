@@ -11,6 +11,8 @@
   vg mix RUN --base v3 [--script vX] [--voice v1] [--visuals v3] [--bgm v2]
   vg bgm list | suggest RUN [--n 3]
   vg compare RUN
+  vg analyze VIDEO [--json PATH]    measure pixels/audio and write a six-frame contact sheet
+  vg sfx build                     synthesize the original local sound-effect library
   vg feedback RUN "<text>" [--variant vN] | vg feedback RUN --show
   vg smoke                          fixed three-line run end to end (no GPU)
 <run> is a run/variant path, a directory name under runs/, "latest", or "<run>:v2".
@@ -136,9 +138,10 @@ def cmd_smoke() -> int:
     media.save(run, "storyboard", Storyboard(type_id="trivia_explainer", scenes=[
         Scene(id="C01", line_ids=["L01"], component="title_card",
               props={"text": "ハチミツは\nなぜ腐らない？", "emphasis": ["腐らない"], "from": "#3a2a10", "to": "#120d05"}),
-        Scene(id="C02", line_ids=["L02", "L03"], component="background", props={
+        Scene(id="C02", line_ids=["L02"], component="background", props={
             "from": "#14283c", "to": "#0b1520",
-            "overlays": [{"component": "source_card", "props": {"text": "スモークテスト用の固定台本"}}]})]))
+            "overlays": [{"component": "source_card", "props": {"text": "スモークテスト用の固定台本"}}]}),
+        Scene(id="C03", line_ids=["L03"], component="background", props={"from": "#3c1f14", "to": "#1a0d08"})]))
     print(run)
     for name in PIPELINE:
         stage(run, name)
@@ -187,6 +190,10 @@ def main(argv: list[str] | None = None) -> int:
     suggest.add_argument("run")
     suggest.add_argument("--n", type=int, default=3)
     sub.add_parser("compare").add_argument("run")
+    analyze = sub.add_parser("analyze")
+    analyze.add_argument("video")
+    analyze.add_argument("--json", type=Path)
+    sub.add_parser("sfx").add_subparsers(dest="sfx_cmd", required=True).add_parser("build")
     feedback = sub.add_parser("feedback")
     feedback.add_argument("run")
     feedback.add_argument("text", nargs="?")
@@ -200,6 +207,23 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if a.cmd == "smoke":
         return cmd_smoke()
+    if a.cmd == "sfx":
+        from .sfx import build
+        for path in build():
+            print(path)
+        return 0
+    if a.cmd == "analyze":
+        from .analyze import analyze, japanese_summary
+        video = Path(a.video)
+        if not video.is_file() and ":" in a.video:
+            parent, name = a.video.rsplit("/", 1)
+            video = runs.resolve(parent) / name
+        result = analyze(video)
+        if a.json:
+            a.json.parent.mkdir(parents=True, exist_ok=True)
+            a.json.write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        print(japanese_summary(result))
+        return 0
     if a.cmd == "feedback" and ((a.text is None and not a.show) or (a.text is not None and a.show)):
         p.error('feedback requires either "<text>" or --show')
     if a.cmd == "bgm" and a.bgm_cmd == "list":
