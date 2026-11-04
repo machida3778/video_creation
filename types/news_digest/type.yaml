@@ -12,7 +12,7 @@ length:
   tiktok: {target: 70, min: 61, max: 90}
   x: {target: 70, max: 140}
 research: {required: true, min_sources: 3, recency_days: 30}
-voice: {narrator: [narrator_male_calm, vv_himari, default]}
+voice: {narrator: [narrator_female, narrator_male, vv_himari, default]}
 content: [criticism]
 components: [hook_title, caption, timeline, source_card, quote_card, end_card, bgm]
 models: [tts, music, asr, vlm]

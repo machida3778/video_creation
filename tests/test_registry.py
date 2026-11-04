@@ -105,7 +105,11 @@ class RegistryTests(unittest.TestCase):
         spec = self.types["news_digest"]
         self.assertIn("criticism", spec.content)
         self.assertEqual(cast_for_type(spec, self.voices, self.defaults),
-                         {"narrator": "vv_himari"})
+                         {"narrator": "narrator_female"})
+        # Without the narrator voices, the VOICEVOX voice whose terms allow criticism is chosen.
+        voices = {k: (v.model_copy(update={"status": "pending"}) if v.engine == "irodori" else v)
+                  for k, v in self.voices.items()}
+        self.assertEqual(cast_for_type(spec, voices, self.defaults), {"narrator": "vv_himari"})
 
 
 class SiteConfigurationTests(unittest.TestCase):

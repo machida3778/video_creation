@@ -304,11 +304,14 @@ class MixedTTSTests(unittest.TestCase):
                 self.assertAlmostEqual(timings.lines[0].end - timings.lines[0].start, 0.25)
                 engine.assert_not_called()
 
-    def test_registry_seed_is_optional_and_pending_voices_stay_pending(self):
+    def test_registry_narrators_are_frozen_voices(self):
         voices = registry.load_voices()
-        for name in ("narrator_male_calm", "narrator_female_announcer"):
-            self.assertIsNone(voices[name].seed)
-            self.assertEqual(voices[name].status, "pending")
+        for name in ("narrator_female", "narrator_male"):
+            voice = voices[name]
+            self.assertEqual((voice.engine, voice.status), ("irodori", "active"))
+            self.assertIsInstance(voice.seed, int)
+            self.assertTrue(voice.reference and voice.reference.startswith("assets/media/voices/"))
+        self.assertEqual(registry.load_voice_defaults()["narrator"], "narrator_female")
 
 
 class WorkerTests(unittest.TestCase):

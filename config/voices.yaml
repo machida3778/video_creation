@@ -5,7 +5,7 @@
 # restricted_content: content the voice's terms forbid; checked against the video type's `content`.
 
 defaults:
-  narrator: vv_suzumatsu          # until the Irodori narrators are auditioned
+  narrator: narrator_female       # main narrator, chosen by the user (2026-11-04)
   dialogue_a: vv_zundamon
   dialogue_b: vv_metan
 
@@ -114,37 +114,42 @@ voices:
     restricted_content: [criticism]
     notes: 個人・同人の動画の広告収入は明記して許可。法人アカウントなどの商用は要相談。権利侵害・著しいイメージ毀損は禁止。
 
-  # ---------------- narrator engines (lab GPU). pending = reference voice not designed/auditioned yet
-  - id: narrator_male_calm
+  # ---------------- narrator voices (Irodori-TTS v4.1 Small on a lab GPU)
+  # Designed from a text description, auditioned and chosen by the user (2026-11-04), then frozen: the
+  # reference is 4 clips (~30 s) in assets/media/voices/<id>/ (gitignored; rebuild with
+  # `python -m vg.narrator freeze` from the audition caption + seed if lost).
+  # Model: MIT; codec Aratako/Semantic-DACVAE-Japanese-32dim: MIT (derived from facebook/dacvae-watermarked,
+  # Apache-2.0). Outputs carry the model's inaudible AI watermark (silentcipher, MIT).
+  - id: narrator_female        # main narrator (user's favourite)
     engine: irodori
-    # Activate after audition + freeze; set reference to the frozen ref_*.wav directory and retain its seed.
-    # Model: MIT; codec Aratako/Semantic-DACVAE-Japanese-32dim: MIT,
-    # derived from facebook/dacvae-watermarked: Apache-2.0.
-    status: pending
+    status: active
     model: Aratako/Irodori-TTS-v4.1-Small
-    name: 男性ナレーター（落ち着き）
-    aliases: [男性ナレーター, ナレーター（男性）]
-    gender: male
-    tone: [落ち着いた, 低め, ドキュメンタリー, ニュース]
+    name: 女性ナレーター
+    aliases: [女性ナレーター, ナレーター（女性）, 女性の声, ナレーター]
+    gender: female
+    tone: [明るい, 親しみやすい, 明瞭, 解説]
     role: narrator
-    voice_description: 落ち着いた低めの成人男性。明瞭な標準語。控えめな抑揚。
+    voice_description: 明るく親しみやすい女性ナレーター
+    reference: assets/media/voices/narrator_female
+    seed: 1001
+    speed: 1.4
     license: MIT (Irodori-TTS v4.1 Small)
     license_url: https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small
     commercial_ok: true
 
-  - id: narrator_female_announcer
+  - id: narrator_male
     engine: irodori
-    # Activate after audition + freeze; set reference to the frozen ref_*.wav directory and retain its seed.
-    # Model: MIT; codec Aratako/Semantic-DACVAE-Japanese-32dim: MIT,
-    # derived from facebook/dacvae-watermarked: Apache-2.0.
-    status: pending
+    status: active
     model: Aratako/Irodori-TTS-v4.1-Small
-    name: 女性ナレーター（アナウンサー風）
-    aliases: [女性アナウンサー, 女性ナレーター, アナウンサー風]
-    gender: female
-    tone: [明瞭, ニュース, 穏やか, フォーマル]
+    name: 男性ナレーター
+    aliases: [男性ナレーター, ナレーター（男性）, 男性の声]
+    gender: male
+    tone: [明瞭, 爽やか, 若い, 解説]
     role: narrator
-    voice_description: 成人女性のアナウンサー。明瞭な標準語。自然で穏やかな抑揚。
+    voice_description: 明瞭で爽やかな若い男性ナレーター
+    reference: assets/media/voices/narrator_male
+    seed: 1001
+    speed: 1.4
     license: MIT (Irodori-TTS v4.1 Small)
     license_url: https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small
     commercial_ok: true
