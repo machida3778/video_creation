@@ -65,6 +65,30 @@ def cmd_cast(run: Path) -> int:
     return 0
 
 
+def cmd_yomi(run: Path, approve: bool = False) -> int:
+    import os
+
+    from .yomi import reading_table
+    rows = reading_table(run)
+    report = {"lines": rows, "reviewed": approve}
+    path = run / "yomi_check.json"
+    path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    script_time = (run / "script.json").stat().st_mtime_ns
+    if path.stat().st_mtime_ns <= script_time:
+        # Shared filesystems can give consecutive writes the same clock tick.
+        os.utime(path, ns=(path.stat().st_atime_ns, script_time + 1))
+    print("line\tflags (*=needs yomi; D=digit L=Latin K=kanji N=name)\ttext\tengine reading")
+    for row in rows:
+        marks = "".join(mark for key, mark in (("has_digits", "D"), ("has_latin", "L"),
+                         ("has_rare_kanji_run", "K"), ("has_proper_noun_hint", "N")) if row[key])
+        marks = ("*" if row["flagged"] else "") + marks
+        text = row["text"].replace("\n", " ").replace("\t", " ")
+        print(f"{row['line_id']}\t{marks or '-'}\t{text}\t{row['engine_reading']}")
+    print(f"reviewed: {str(approve).lower()}")
+    return 0
+
+
 def stage(run: Path, name: str) -> None:
     media = _media()
     runs.mark(run, name, "running")
@@ -145,6 +169,8 @@ def cmd_smoke() -> int:
     print(run)
     for name in PIPELINE:
         stage(run, name)
+        if name == "tts":
+            cmd_yomi(run, approve=True)  # fixed, known smoke script
     return 0
 
 
@@ -190,6 +216,9 @@ def main(argv: list[str] | None = None) -> int:
     new = sub.add_parser("new")
     new.add_argument("request")
     new.add_argument("--slug")
+    yomi = sub.add_parser("yomi", help="inspect VOICEVOX readings before QA")
+    yomi.add_argument("run")
+    yomi.add_argument("--approve", action="store_true", help="mark readings reviewed after fixing yomi and rerunning tts")
     for name in ["validate", "cast", "status", "sheet", *PIPELINE]:
         parser = sub.add_parser(name)
         parser.add_argument("run")
@@ -260,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{track.id}\t{track.title}\t{track.artist}\t{', '.join(track.mood)}\t{track.bpm}\t{track.length_sec}")
         return 0
     run = runs.resolve(a.run)
+    if a.cmd == "yomi":
+        return cmd_yomi(run, a.approve)
     if a.cmd == "variant":
         if a.variant_cmd == "list":
             return cmd_variants(run)

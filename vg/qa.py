@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fractions import Fraction
+import json
 import math
 from pathlib import Path
 import re
@@ -238,6 +239,28 @@ def check_metadata(run_dir) -> Check:
                         f"search_query present={bool(query_present)}")
 
 
+def check_yomi(run_dir) -> Check:
+    run_dir = Path(run_dir)
+    path, script = run_dir / "yomi_check.json", run_dir / "script.json"
+    passed = False
+    if not path.is_file():
+        detail = "missing yomi_check.json; run `vg yomi RUN`, fix readings, rerun `vg tts RUN`, then `vg yomi RUN --approve`"
+    elif not script.is_file():
+        detail = "missing script.json; write the script and run `vg yomi RUN`"
+    else:
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+            reviewed = isinstance(report, dict) and report.get("reviewed") is True
+            fresh = path.stat().st_mtime_ns > script.stat().st_mtime_ns
+            passed = reviewed and fresh
+            detail = f"reviewed={reviewed}; newer than script={fresh}"
+            if not passed:
+                detail += "; run `vg yomi RUN`, fix readings, rerun tts, then `vg yomi RUN --approve`"
+        except (ValueError, OSError) as exc:
+            detail = f"invalid yomi_check.json ({type(exc).__name__}); run `vg yomi RUN`"
+    return Check(id="yomi", passed=passed, severity="block", redo_stage="script", detail=detail)
+
+
 def check_sfx_density(timeline, style=None) -> Check:
     style = registry.load_style() if style is None else style
     times = sorted(a.start for a in _timeline(timeline).audio if a.kind == "sfx")
@@ -261,7 +284,7 @@ def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
             check_caption_timing(run_dir, _duration(info)), check_hook(metrics, style),
             check_tempo(run_dir, metrics, style), check_speech_rate(metrics, style),
             check_caption_coverage(metrics, style), check_originality(run_dir, runs_root=runs_root, style=style),
-            check_disclosure(run_dir), check_metadata(run_dir), check_sfx_density(run_dir, style)]
+            check_disclosure(run_dir), check_metadata(run_dir), check_sfx_density(run_dir, style), check_yomi(run_dir)]
 
 
 def write_report(run_dir, checks) -> QAReport:

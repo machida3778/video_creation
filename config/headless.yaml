@@ -1,0 +1,20 @@
+# Narrow tool permissions for subscription-authenticated, unattended Claude runs.
+allowed_tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - WebSearch
+  - WebFetch
+  - Agent
+  - 'Bash(.venv/bin/vg:*)'
+  - 'Bash($REPO/.venv/bin/vg:*)'
+  - 'Bash(uv run vg:*)'
+  - 'Bash(ls:*)'
+  - 'Bash(cat:*)'
+  - 'Bash(head:*)'
+  - 'Bash(tail:*)'
+  - 'Bash(pwd)'
+max_minutes: 180
+model: ""  # empty uses the account default

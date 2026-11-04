@@ -38,6 +38,10 @@ class MediaQATests(unittest.TestCase):
             media.save(directory, "timeline", Timeline(duration=3.2, clips=[], captions=[
                 Caption(start=0.1, end=3.0, text="テスト字幕")]))
             media.save(directory, "script", Script(title="合成テスト", lines=[Line(id="L1", text="あ" * 24)]))
+            review = directory / "yomi_check.json"
+            review.write_text(json.dumps({"lines": [], "reviewed": True}), encoding="utf-8")
+            script_time = (directory / "script.json").stat().st_mtime_ns
+            os.utime(review, ns=(script_time + 1_000_000, script_time + 1_000_000))
             media.save(directory, "timings", Timings(sample_rate=48000, total_sec=3.2,
                        lines=[LineTiming(line_id="L1", audio="test.wav", start=0.1, end=3.1)]))
             media.save(directory, "manifest", Manifest())
@@ -64,7 +68,7 @@ class MediaQATests(unittest.TestCase):
         self.assertEqual({c.id for c in checks}, {"format", "duration", "loudness", "black_frames",
                                                 "silence", "safe_area", "caption_timing", "hook", "tempo",
                                                 "speech_rate", "caption_coverage", "originality", "disclosure",
-                                                "sfx_density", "metadata"})
+                                                "sfx_density", "metadata", "yomi"})
         for check in checks:
             with self.subTest(check=check.id):
                 self.assertTrue(check.passed, check.detail)

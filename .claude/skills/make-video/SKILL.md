@@ -5,6 +5,8 @@ description: Produce a finished vertical short (YouTube Shorts / TikTok / X) fro
 
 # make-video
 
+Headless runs start from `scripts/run_request.sh` and must never ask questions; make reasonable assumptions or report a blocker. Use `.venv/bin/vg` for headless CLI commands.
+
 Prepare candidates for human selection without routine clarification. Never publish automatically. Every decision is recorded in the run directory; when something blocks (missing tool, no allowed voice, QA keeps failing), stop and report what is missing instead of asking. Rules from AGENTS.md apply (no API keys or paid APIs; open-weights models only; licences recorded).
 
 Commands below run from the repo root: `uv run vg ...` (repo-relative paths). Schemas: `vg/schemas.py`. After writing any stage JSON run `vg validate <run>`.
@@ -34,6 +36,8 @@ Spawn a fresh general-purpose subagent with only `research.json` and `script.jso
 
 ## 6. TTS
 `vg tts RUN` → `audio/*.wav`, `timings.json`. Check `timings.total_sec` against the type length; if outside, shorten or extend the script and redo 4–6.
+
+After each TTS (including variants), run `vg yomi RUN:vN`, fix readings (add `yomi`) for wrong or flagged lines, rerun `vg tts RUN:vN`, then `vg yomi RUN:vN --approve` (use `RUN` for a run without variants).
 
 ## 7. Storyboard and assets
 Follow `types/<type>/prompts/storyboard.md`. Scenes must cover every line exactly once, in order, using only components the renderer knows (`render/src/components/registry.tsx` COMPONENTS). Scenes with `visual.kind: t2i` get images from `vg assets RUN` (Z-Image Turbo on an idle lab GPU, recorded in `assets/manifest.json` with prompt, seed and licence). If no lab GPU is idle, wait and retry later, or fall back to backgrounds and say so in the report.
