@@ -89,6 +89,8 @@ class Script(Spec):
     title: str
     lines: list[Line] = Field(min_length=1)
     cast: dict[str, str] = {"narrator": ""}   # role -> voice_id (config/voices.yaml)
+    hook_options: list[str] = []    # alternative first lines considered (>= 4 across >= 3 hook types)
+    search_query: str | None = None  # main search phrase; used in the description and on-screen text
     # role -> per-video overrides of the registry voice: {"speed": 1.4, "pitch": 0.0, "intonation": 1.2}
     voice_overrides: dict[str, dict[str, float]] = {}
 
