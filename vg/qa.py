@@ -5,7 +5,6 @@ from fractions import Fraction
 import math
 from pathlib import Path
 import re
-import unicodedata
 
 from . import registry
 from .media import FFMPEG, load, probe, run, save
@@ -13,6 +12,7 @@ from .schemas import Check, QAReport, Timeline
 from .analyze import analyze_run, scene_changes, interval_stats
 from .disclosure import realistic_assets
 from . import run as runs
+from .captions import em, FONT_PX
 
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|inf|nan)"
 
@@ -122,9 +122,8 @@ def check_safe_area(timeline) -> Check:
     for caption in timeline.captions:
         lines = caption.text.split("\n")
         max_lines = max(max_lines, len(lines))
-        font_px = 84 if caption.style == "title" else 66
-        measured = [font_px * sum(0.55 if ord(ch) < 128 or unicodedata.east_asian_width(ch) == "H"
-                                 else 1.0 for ch in line) for line in lines]
+        font_px = FONT_PX.get(caption.style, FONT_PX["default"])
+        measured = [font_px * em(line, caption.emphasis) for line in lines]
         widths.extend(measured)
         violations += int(len(lines) > 2 or any(width > 780 for width in measured))
     return Check(id="safe_area", passed=violations == 0, redo_stage="timeline",
@@ -226,6 +225,19 @@ def check_disclosure(run_dir) -> Check:
                  + ("publish present" if exists else f"publish pending; package sets synthetic_media={bool(ids)}"))
 
 
+def check_metadata(run_dir) -> Check:
+    if not (Path(run_dir) / "publish.json").is_file():
+        return Check(id="metadata", passed=True, redo_stage="package",
+                     detail="publish pending; metadata is checked after packaging")
+    publish = load(run_dir, "publish")
+    title, description, tags = len(publish.title), len(publish.description), len(publish.hashtags)
+    query_present = not publish.search_query or publish.search_query in publish.description
+    return Check(id="metadata", passed=title <= 100 and description <= 5000
+                 and 3 <= tags <= 5 and query_present, redo_stage="package",
+                 detail=f"title={title}/100; description={description}/5000; hashtags={tags} (3..5); "
+                        f"search_query present={bool(query_present)}")
+
+
 def check_sfx_density(timeline, style=None) -> Check:
     style = registry.load_style() if style is None else style
     times = sorted(a.start for a in _timeline(timeline).audio if a.kind == "sfx")
@@ -249,7 +261,7 @@ def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
             check_caption_timing(run_dir, _duration(info)), check_hook(metrics, style),
             check_tempo(run_dir, metrics, style), check_speech_rate(metrics, style),
             check_caption_coverage(metrics, style), check_originality(run_dir, runs_root=runs_root, style=style),
-            check_disclosure(run_dir), check_sfx_density(run_dir, style)]
+            check_disclosure(run_dir), check_metadata(run_dir), check_sfx_density(run_dir, style)]
 
 
 def write_report(run_dir, checks) -> QAReport:

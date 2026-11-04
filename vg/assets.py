@@ -93,9 +93,9 @@ def t2i_jobs(board: Storyboard, run: Path | None = None, manifest: Manifest | No
     return jobs
 
 
-def generate(run: Path, board: Storyboard, manifest: Manifest | None = None, *,
+def _prepare(run: Path, board: Storyboard, manifest: Manifest | None = None, *,
              bgm_tracks: dict[str, BgmTrack] | None = None, library_root: Path | None = None) -> Manifest:
-    """Generate the storyboard's images, set each t2i scene's visual.ref, and return the updated manifest."""
+    """Resolve local assets before scheduling any GPU work."""
     manifest = manifest or Manifest()
     used_sfx = dict.fromkeys(effect_id for sc in board.scenes if sc.line_ids
                             for effect_id, _ in events(sc.props.get("sfx")))
@@ -148,28 +148,49 @@ def generate(run: Path, board: Storyboard, manifest: Manifest | None = None, *,
             board.music.asset = asset.id
             if track.gain_db is not None and board.music.gain_db == -20.0:
                 board.music.gain_db = track.gain_db
-    jobs = t2i_jobs(board, run, manifest)
-    if jobs:
+    return manifest
+
+
+def generate(run: Path, board: Storyboard, manifest: Manifest | None = None, *,
+             bgm_tracks: dict[str, BgmTrack] | None = None, library_root: Path | None = None) -> Manifest:
+    """Single-variant entry point; uses the same worker protocol as the batched stage."""
+    return generate_many([(run, board, manifest)], bgm_tracks=bgm_tracks, library_root=library_root)[0]
+
+
+def generate_many(entries: list[tuple[Path, Storyboard, Manifest | None]], *,
+                  bgm_tracks: dict[str, BgmTrack] | None = None,
+                  library_root: Path | None = None) -> list[Manifest]:
+    """Generate every variant's missing images in one worker invocation (one model load)."""
+    prepared, all_jobs = [], []
+    for directory, board, manifest in entries:
+        run = Path(directory).resolve()
+        manifest = _prepare(run, board, manifest, bgm_tracks=bgm_tracks, library_root=library_root)
+        jobs = t2i_jobs(board, run, manifest)
         out = run / "assets" / "images"
-        out.mkdir(parents=True, exist_ok=True)
-        spec = run / "assets" / "t2i_jobs.json"
-        spec.write_text(json.dumps({"model": T2I["model"], "jobs": jobs}, ensure_ascii=False, indent=2), encoding="utf-8")
-        _run_on_lab_gpu(f"workers/t2i/.venv/bin/python workers/t2i/generate.py --spec {shlex.quote(remote(spec))} "
-                        f"--out {shlex.quote(remote(out))}", T2I["min_mem_mb"])
-        done = {a.id for a in manifest.assets}
         for job in jobs:
-            path = out / f"{job['id']}.png"
+            job["output"] = remote(out / f"{job['id']}.png")
+        all_jobs.extend(jobs)
+        prepared.append((run, board, manifest, jobs))
+    if all_jobs:
+        spec = prepared[0][0] / "assets" / "t2i_jobs.json"
+        spec.parent.mkdir(parents=True, exist_ok=True)
+        spec.write_text(json.dumps({"model": T2I["model"], "jobs": all_jobs}, ensure_ascii=False, indent=2), encoding="utf-8")
+        _run_on_lab_gpu(f"workers/t2i/.venv/bin/python workers/t2i/generate.py --spec {shlex.quote(remote(spec))}",
+                        T2I["min_mem_mb"])
+    for run, board, manifest, jobs in prepared:
+        for job in jobs:
+            path = run / "assets" / "images" / f"{job['id']}.png"
             if not path.is_file():
                 raise RuntimeError(f"t2i worker did not write {path}")
-            if job["id"] not in done:
-                manifest.assets.append(Asset(
-                    id=job["id"], path=str(path.relative_to(run)), kind="image", origin="generated",
-                    tool=T2I["model"], params={k: job[k] for k in ("prompt", "negative", "seed", "width", "height", "realistic")},
-                    license=T2I["license"], license_url=T2I["license_url"], commercial_ok=True))
+            manifest.assets = [a for a in manifest.assets if a.id != job["id"]]
+            manifest.assets.append(Asset(
+                id=job["id"], path=str(path.relative_to(run)), kind="image", origin="generated",
+                tool=T2I["model"], params={k: job[k] for k in ("prompt", "negative", "seed", "width", "height", "realistic")},
+                license=T2I["license"], license_url=T2I["license_url"], commercial_ok=True))
             for sc in board.scenes:
                 if sc.id == job["scene"]:
                     sc.visual.ref = job["id"]
-    return manifest
+    return [manifest for _, _, manifest, _ in prepared]
 
 
 LOCKS = ROOT / "local" / "gpu_locks"
@@ -192,6 +213,13 @@ def _lock(host: str, gpu: int) -> Path | None:
 
 
 def _run_on_lab_gpu(command: str, min_mem_mb: int) -> None:
+    cache = site.load().get("LAB_LOCAL_HF_CACHE", "").strip()
+    if cache:
+        if not Path(cache).is_absolute():
+            raise ValueError("LAB_LOCAL_HF_CACHE must be an absolute GPU-local directory")
+        # The wrapper syncs only the needed snapshot, then sets HF_HUB_CACHE for the worker.
+        command = (f"workers/t2i/.venv/bin/python workers/t2i/cache.py "
+                   f"--cache {shlex.quote(cache)} --model {shlex.quote(T2I['model'])} -- {command}")
     candidates = idle_gpus(min_mem_mb)
     if not candidates:
         raise RuntimeError(f"no idle lab GPU with >= {min_mem_mb} MiB; try later or use an HPC cluster")

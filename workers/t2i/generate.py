@@ -3,8 +3,9 @@
   CUDA_VISIBLE_DEVICES=<gpu> HF_HUB_OFFLINE=1 workers/t2i/.venv/bin/python workers/t2i/generate.py \
       --spec runs/<id>/assets/t2i_jobs.json --out runs/<id>/assets/images
 
-spec: {"model": "Tongyi-MAI/Z-Image-Turbo", "jobs": [{"id", "prompt", "negative", "seed", "width", "height"}]}
-Writes <out>/<id>.png and <out>/<id>.json (timing, model, seed). Existing PNGs are skipped (resume).
+spec: {"model": "Tongyi-MAI/Z-Image-Turbo", "jobs": [{"id", "prompt", "negative", "seed", "width", "height", "output"}]}
+Writes each job's absolute output path and an adjacent JSON (timing, model, seed).
+Legacy specs can use --out for <out>/<id>.png. Existing PNGs are skipped (resume).
 """
 from __future__ import annotations
 
@@ -33,28 +34,39 @@ def load(model: str):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--spec", required=True)
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out")
     a = ap.parse_args()
     spec = json.loads(Path(a.spec).read_text(encoding="utf-8"))
-    out = Path(a.out)
-    out.mkdir(parents=True, exist_ok=True)
-    jobs = [j for j in spec["jobs"] if not (out / f"{j['id']}.png").is_file()]
+    jobs = [(j, output_path(j, a.out)) for j in spec["jobs"]]
+    jobs = [(job, path) for job, path in jobs if not path.is_file()]
     if not jobs:
         print("[t2i] nothing to do")
         return
     t0 = time.time()
     pipe = load(spec["model"])
     print(f"[t2i] loaded {spec['model']} in {time.time() - t0:.1f}s on {torch.cuda.get_device_name(0)}", flush=True)
-    for job in jobs:
+    for job, path in jobs:
+        path.parent.mkdir(parents=True, exist_ok=True)
         t1 = time.time()
         image = pipe(prompt=job["prompt"], height=job["height"], width=job["width"],
                      num_inference_steps=STEPS[spec["model"]], guidance_scale=0.0,
                      generator=torch.Generator("cuda").manual_seed(int(job["seed"]))).images[0]
-        image.save(out / f"{job['id']}.png")
+        image.save(path)
         meta = {"model": spec["model"], "seed": job["seed"], "seconds": round(time.time() - t1, 2),
                 "peak_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2)}
-        (out / f"{job['id']}.json").write_text(json.dumps(meta), encoding="utf-8")
+        path.with_suffix(".json").write_text(json.dumps(meta), encoding="utf-8")
         print(f"[t2i] {job['id']} {meta}", flush=True)
+
+
+def output_path(job: dict, out: str | None) -> Path:
+    if "output" in job:
+        path = Path(job["output"])
+        if not path.is_absolute() or path.suffix != ".png":
+            raise ValueError("job output must be an absolute PNG path")
+        return path
+    if out is None:
+        raise ValueError("job needs an absolute output path or --out")
+    return Path(out) / f"{job['id']}.png"
 
 
 if __name__ == "__main__":

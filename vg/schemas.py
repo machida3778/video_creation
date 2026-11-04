@@ -264,6 +264,7 @@ class QAReport(Spec):
 class Publish(Spec):
     title: str
     description: str                # includes sources and required credits
+    search_query: str | None = None
     hashtags: list[str] = []
     platforms: list[Platform]
     synthetic_media: bool           # disclosure flag for realistic AI-generated content

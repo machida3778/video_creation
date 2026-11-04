@@ -160,6 +160,30 @@ def cmd_variants(run: Path) -> int:
     return 0
 
 
+def cmd_assets_all(run: Path) -> int:
+    from .assets import generate_many
+    if run.parent.name == "variants":
+        raise ValueError("assets --all requires the parent run, not a variant")
+    media = _media()
+    variants = runs.variants(run) or [run]
+    entries = [(v, media.load(v, "storyboard"),
+                media.load(v, "manifest") if (v / "assets/manifest.json").is_file() else None)
+               for v in variants]
+    for variant in variants:
+        runs.mark(variant, "assets", "running")
+    try:
+        manifests = generate_many(entries)
+        for (variant, board, _), manifest in zip(entries, manifests):
+            media.save(variant, "manifest", manifest)
+            media.save(variant, "storyboard", board)
+            runs.mark(variant, "assets", "done")
+    except Exception as exc:
+        for variant in variants:
+            runs.mark(variant, "assets", "failed", f"{type(exc).__name__}: {exc}")
+        raise
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="vg", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -167,7 +191,10 @@ def main(argv: list[str] | None = None) -> int:
     new.add_argument("request")
     new.add_argument("--slug")
     for name in ["validate", "cast", "status", "sheet", *PIPELINE]:
-        sub.add_parser(name).add_argument("run")
+        parser = sub.add_parser(name)
+        parser.add_argument("run")
+        if name == "assets":
+            parser.add_argument("--all", action="store_true", help="batch all variants in one GPU job")
     make = sub.add_parser("make")
     make.add_argument("run")
     make.add_argument("--from", dest="start", choices=PIPELINE, default=PIPELINE[0])
@@ -276,6 +303,8 @@ def main(argv: list[str] | None = None) -> int:
         for name in PIPELINE[PIPELINE.index(a.start):]:
             stage(run, name)
         return 0
+    if a.cmd == "assets" and a.all:
+        return cmd_assets_all(run)
     stage(run, a.cmd)
     return 0
 

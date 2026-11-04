@@ -62,7 +62,7 @@ export const CaptionLines: React.FC<{
           paintOrder="stroke"
         >
           {splitEmphasis(line, emphasis).map(([seg, em], j) => (
-            <tspan key={j} fill={em ? s.accent : s.fill}>
+            <tspan key={j} fill={em ? s.accent : s.fill} fontSize={s.size * (em ? 1.2 : 1)}>
               {seg}
             </tspan>
           ))}

@@ -1,20 +1,54 @@
 """Create publishing metadata and copy a QA-approved run to the local outbox."""
 from pathlib import Path
+import re
 import shlex
 import shutil
 
-from .media import ROOT, load, save
+from PIL import Image
+
+from .media import FFMPEG, ROOT, load, run, save
 from .schemas import Publish
 from . import registry, run as runs
 from .variants import metadata
 from .disclosure import needs_disclosure
+from .qa import check_metadata, write_report
+
+
+def _hashtags(brief, script, type_name: str) -> list[str]:
+    tags = list(dict.fromkeys(c for c in brief.constraints if c.startswith("#")))[:5]
+    if len(tags) >= 3:
+        return tags
+    # Prefer the type and search phrase, then their individual words and type-specific fallbacks.
+    candidates = [type_name, script.search_query or ""]
+    candidates += re.split(r"[\W_]+", " ".join(candidates))
+    candidates += [type_name + suffix for suffix in ("動画", "解説", "紹介")]
+    for word in candidates:
+        word = re.sub(r"[^\w]", "", word)
+        tag = "#" + word
+        if word and tag not in tags:
+            tags.append(tag)
+        if len(tags) >= 3:
+            break
+    return tags
+
+
+def covers(run_dir: Path) -> None:
+    """Extract a vertical cover at 0.5 s and a small preview for human review."""
+    cover = run_dir / "cover.jpg"
+    cover.unlink(missing_ok=True)
+    run([str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-ss", "0.5", "-i",
+         str(run_dir / "final.mp4"), "-vf", "scale=1080:1920,setsar=1", "-frames:v", "1",
+         "-q:v", "2", str(cover)])
+    with Image.open(cover) as image:
+        image.resize((360, 640), Image.Resampling.LANCZOS).save(run_dir / "cover_small.jpg", quality=90)
 
 
 def package(run_dir) -> Path:
     run_dir = Path(run_dir)
     if not (run_dir / "qa.json").is_file():
         raise ValueError("Packaging requires qa.json")
-    if not load(run_dir, "qa").passed:
+    if any(not c.passed and c.severity == "block" and c.id != "metadata"
+           for c in load(run_dir, "qa").checks):
         raise ValueError("Packaging requires a passed QA report")
     # Check deliverables before writing metadata or creating an outbox directory.
     for name in ("final.mp4", "final.srt"):
@@ -31,16 +65,27 @@ def package(run_dir) -> Path:
     credits = list(dict.fromkeys(a.credit.strip() for a in manifest.assets if a.credit and a.credit.strip()))
     if credits:
         parts.append("\n".join(credits))
+    if script.search_query and script.search_query not in "\n\n".join(parts):
+        parts.insert(1, f"{script.search_query}について解説します。")
     board = load(run_dir, "storyboard") if (run_dir / "storyboard.json").is_file() else None
+    type_id = (load(run_dir, "route").type_id if (run_dir / "route.json").is_file()
+               else board.type_id if board else "short_video")
+    spec = registry.load_types().get(type_id)
+    type_name = spec.name if spec else type_id
     publish = Publish(title=script.title, description="\n\n".join(parts),
-                      hashtags=[c for c in brief.constraints if c.startswith("#")], platforms=brief.platforms,
+                      search_query=script.search_query, hashtags=_hashtags(brief, script, type_name),
+                      platforms=brief.platforms,
                       synthetic_media=needs_disclosure(manifest),
                       music_track=board.music.track if board and board.music else None)
     save(run_dir, "publish", publish)
+    report = write_report(run_dir, [check_metadata(run_dir)])
+    if not report.passed:
+        raise ValueError("Packaging requires passed metadata QA (see qa.json)")
+    covers(run_dir)
     destination = (ROOT / "outbox" / run_dir.parent.parent.name / run_dir.name
                    if run_dir.parent.name == "variants" else ROOT / "outbox" / run_dir.name)
     destination.mkdir(parents=True, exist_ok=True)
-    for name in ("final.mp4", "final.srt", "publish.json"):
+    for name in ("final.mp4", "final.srt", "publish.json", "cover.jpg", "cover_small.jpg"):
         shutil.copy2(run_dir / name, destination / name)
     return destination
 

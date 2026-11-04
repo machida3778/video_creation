@@ -12,7 +12,7 @@ from unittest.mock import call, patch
 import yaml
 
 from vg import assets, bgm, cli, registry, run as runs
-from vg.media import load, save
+from vg.media import FFMPEG, load, run, save
 from vg.package import compare, package
 from vg.schemas import (Asset, Brief, Check, Line, LineTiming, Manifest, Music, QAReport,
                         Research, Route, Scene, Script, Storyboard, Timeline, Timings, Visual)
@@ -246,7 +246,11 @@ class VariantTests(unittest.TestCase):
         self.assertFalse((partial / "storyboard.json").exists())
 
     def test_variant_package_and_comparison(self):
+        video = self.root / "synthetic.mp4"
+        run([str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-f", "lavfi", "-i",
+             "color=c=blue:s=108x192:r=30:d=1", "-c:v", "libx264", "-threads", "2", str(video)])
         for variant in (self.v1, self.v2):
+            (variant / "final.mp4").write_bytes(video.read_bytes())
             save(variant, "timeline", Timeline(duration=12.5, clips=[]))
             save(variant, "qa", QAReport(checks=[Check(id="test", passed=True),
                                                 Check(id="warning", passed=False, severity="warn")]))

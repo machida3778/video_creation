@@ -38,6 +38,16 @@ const KenBurnsImage: React.FC<{props: P; frames: number}> = ({props, frames}) =>
   const pan = cut.pan;
   const d = 40 * t;
   const shift = {left: [-d, 0], right: [d, 0], up: [0, -d], down: [0, d], none: [0, 0]}[pan] ?? [0, 0];
+  const punches = Array.isArray(props.punch) ? props.punch : [];
+  const punch = punches.reduce<number>((scale, at: unknown) => {
+    if (typeof at !== 'number' || !Number.isFinite(at) || at < 0) return scale;
+    const elapsed = frame / fps - at;
+    if (elapsed < 0 || elapsed > 0.8) return scale;
+    // A quick 0.2 s push, followed by a smooth 0.6 s return. Overlaps never compound.
+    const progress = elapsed <= 0.2 ? elapsed / 0.2 : (0.8 - elapsed) / 0.6;
+    const eased = progress * progress * (3 - 2 * progress);
+    return Math.max(scale, 1 + 0.12 * eased);
+  }, 1);
   return (
     <AbsoluteFill style={{overflow: 'hidden'}}>
       <Img
@@ -46,7 +56,7 @@ const KenBurnsImage: React.FC<{props: P; frames: number}> = ({props, frames}) =>
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          transform: `scale(${z0 + (z1 - z0) * t}) translate(${shift[0]}px, ${shift[1]}px)`,
+          transform: `scale(${(z0 + (z1 - z0) * t) * punch}) translate(${shift[0]}px, ${shift[1]}px)`,
         }}
       />
     </AbsoluteFill>
