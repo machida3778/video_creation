@@ -5,6 +5,9 @@ description: 「v2を投稿して」「v3を公開して」「非公開でテス
 
 # 動画の投稿
 
+ユーザーの方針（2026-11-05）: 人が版を選んだら（例「v2で」）、**確認を挟まずに公開（public）で投稿**する。版の選択そのものは必ず人が行い、無人実行（VG_HEADLESS=1）では投稿しない。
+サムネイルが権限エラーで失敗したら、チャンネルの電話番号認証後に `uv run vg publish youtube-thumbnail RUN:vN` で再設定する。公開範囲の変更は `uv run vg publish youtube-privacy RUN:vN --privacy public --confirm`。TikTok と X は自動投稿しない（TikTok は個人利用のアプリを審査で認めず、X の API は有料）。`post_kit/` の場所を伝える。
+
 依頼された run と variant を特定する。依頼から特定できない場合だけ確認する。投稿依頼がないときや、無人の候補生成では実行しない。
 
 1. 選択した版の `qa.json` が合格していること、`publish.json` のタイトル・説明・出典・クレジット・合成メディア開示を確認する。
