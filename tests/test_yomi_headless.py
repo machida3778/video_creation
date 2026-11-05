@@ -183,7 +183,9 @@ class HeadlessTests(unittest.TestCase):
             'printf "%s\\n" "$*" >> "$TEST_REPO/voicevox.calls"\nexit "${TEST_VOICEVOX_STATUS:-0}"\n',
             encoding="utf-8")
         self.executable("node", "pass\n")
-        self.executable("timeout", "import os, sys\nos.execvpe(sys.argv[2], sys.argv[2:], os.environ)\n")
+        # Fake timeout: skip options such as --kill-after=60s, then the duration, and run the command.
+        self.executable("timeout", "import os, sys\nargs = [a for a in sys.argv[1:] if not a.startswith('--')]\n"
+                                   "os.execvpe(args[1], args[1:], os.environ)\n")
         self.executable("claude", '''import json, os, pathlib, sys
 repo = pathlib.Path(os.environ["TEST_REPO"])
 record = {"args": sys.argv[1:], "secret_names": [name for name in os.environ

@@ -8,7 +8,7 @@ avoid_when: [特定対象への批判や政治・宗教活動, 立ち絵の許�
 pipeline: dialogue
 timing: narration
 length:
-  youtube_shorts: {target: 70, min: 61, max: 90}
+  youtube_shorts: {target: 45, min: 30, max: 59}
   tiktok: {target: 70, min: 61, max: 90}
   x: {target: 70, max: 140}
 research: {required: true, min_sources: 2, recency_days: null}

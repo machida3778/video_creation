@@ -14,6 +14,9 @@
   vg thumbnail RUN[:vN]            render cover options and crop previews
   vg publish auth youtube         authorize the optional official YouTube uploader
   vg publish youtube RUN:vN --confirm [--privacy private|unlisted|public] [--at ISO8601] [--dry-run]
+  vg daily init | status [--check] | next | history [--limit N]   daily autopost (local/requests.md)
+  vg daily add "<request>" --reason "..." | start "<request>" --run RUN | fail "<reason>" | skip "<reason>"
+  vg daily publish RUN:vN --confirm [--dry-run]   schedule for today's slot (private + publishAt)
   vg analyze VIDEO [--json PATH]    measure pixels/audio and write a six-frame contact sheet
   vg sfx build                     synthesize the original local sound-effect library
   vg feedback RUN "<text>" [--variant vN] | vg feedback RUN --show
@@ -214,6 +217,49 @@ def cmd_assets_all(run: Path) -> int:
     return 0
 
 
+def cmd_daily(a) -> int:
+    from . import daily
+    try:
+        if a.daily_cmd == "init":
+            print(daily.init(daily.config()))
+        elif a.daily_cmd == "status":
+            if a.check:
+                return daily.check()
+            print(json.dumps(daily.status(), ensure_ascii=False, indent=2))
+        elif a.daily_cmd == "next":
+            info = daily.status()
+            out = info["resume"] or ({"request": info["next"], "run": None} if info["next"] else {"empty": True})
+            if not out.get("empty"):
+                out["failures"] = info["failures"]
+            print(json.dumps(out, ensure_ascii=False))
+        elif a.daily_cmd == "add":
+            daily.add_auto(a.request, a.reason)
+            print(json.dumps({"added": " ".join(a.request.split())}, ensure_ascii=False))
+        elif a.daily_cmd == "start":
+            print(json.dumps(daily.start(a.request, str(runs.resolve(a.run))), ensure_ascii=False, indent=2))
+        elif a.daily_cmd == "fail":
+            print(json.dumps(daily.fail(a.reason), ensure_ascii=False, indent=2))
+        elif a.daily_cmd == "skip":
+            print(json.dumps({"skipped": daily.skip(a.reason, a.request)}, ensure_ascii=False))
+        elif a.daily_cmd == "history":
+            print(json.dumps(daily.history(a.limit), ensure_ascii=False, indent=2))
+        elif a.daily_cmd == "publish":
+            # Unattended runs may only schedule through the daily runner, never publish directly.
+            if os.environ.get("VG_HEADLESS") == "1" and os.environ.get("VG_AUTOPOST") != "1":
+                print("daily publish in an unattended run requires the daily autopost runner (VG_AUTOPOST=1)",
+                      file=sys.stderr)
+                return 2
+            result = daily.publish(runs.resolve(a.run), confirm=a.confirm, dry_run=a.dry_run)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            if not a.confirm and not a.dry_run:
+                print("Scheduling requires explicit --confirm", file=sys.stderr)
+                return 1
+        return 0
+    except (ValueError, FileNotFoundError, ImportError) as exc:
+        print(f"daily: {exc}", file=sys.stderr)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="vg", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -276,7 +322,29 @@ def main(argv: list[str] | None = None) -> int:
     feedback.add_argument("--variant")
     feedback.add_argument("--show", action="store_true")
     sub.add_parser("smoke")
+    daily = sub.add_parser("daily").add_subparsers(dest="daily_cmd", required=True)
+    daily.add_parser("init")
+    daily.add_parser("status").add_argument("--check", action="store_true",
+                                            help="exit 0 when a video should be made now, 10-12 otherwise")
+    daily.add_parser("next")
+    daily_add = daily.add_parser("add")
+    daily_add.add_argument("request")
+    daily_add.add_argument("--reason", required=True)
+    daily_start = daily.add_parser("start")
+    daily_start.add_argument("request")
+    daily_start.add_argument("--run", required=True)
+    daily.add_parser("fail").add_argument("reason")
+    daily_skip = daily.add_parser("skip")
+    daily_skip.add_argument("reason")
+    daily_skip.add_argument("--request", help="default: today's request")
+    daily_publish = daily.add_parser("publish")
+    daily_publish.add_argument("run")
+    daily_publish.add_argument("--confirm", action="store_true")
+    daily_publish.add_argument("--dry-run", action="store_true")
+    daily.add_parser("history").add_argument("--limit", type=int, default=30)
     a = p.parse_args(argv)
+    if a.cmd == "daily":
+        return cmd_daily(a)
 
     if a.cmd == "publish":
         if os.environ.get("VG_HEADLESS") == "1":

@@ -13,7 +13,7 @@ Read `local/HANDOFF.md` when present for private continuation notes.
 - **Every asset has a licence record** in the run's `assets/manifest.json`: voice, image, clip, music, font and character art. Include required attribution in the video description.
 - **Produced content never goes into Git or GitHub.** Scripts, storyboards, research notes, generated media and run topics stay in ignored `runs/`, `outbox/` and `assets/media/`. Use small synthetic fixtures in tests. Check that these directories and media files are untracked before any push.
 - **Shared GPUs must be checked free immediately before use.** Run `bash scripts/lab/gpu_free.sh <gpu>` in the same command before starting work and choose another GPU if busy. Never stop or interfere with another user's jobs.
-- A human selects the final version and decides whether to publish. The harness prepares candidates and never publishes automatically.
+- Publishing happens only in two ways: the user picks a candidate and asks for it (`publish-video`), or the opt-in daily autopost (`autopost.enabled` in `local/preferences.yaml`) schedules one QA-passed video per day from the user's request list. The daily path uploads privately with `publishAt` for the day's slot, so the user can still cancel it. Unattended runs never publish any other way.
 
 ## Division of labour
 

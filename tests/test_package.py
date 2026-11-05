@@ -54,6 +54,15 @@ class PackageTests(unittest.TestCase):
         self.assertFalse((self.run / "publish.json").exists())
         self.assertFalse((self.root / "outbox").exists())
 
+    def test_youtube_only_package_has_no_post_kit(self):
+        save(self.run, "brief", Brief(request="test", topic="test", platforms=["youtube_shorts"]))
+        save(self.run, "qa", QAReport(checks=[Check(id="format", passed=True)]))
+        stale = self.root / "outbox" / "synthetic" / "post_kit"
+        stale.mkdir(parents=True)
+        destination = package(self.run)
+        self.assertFalse((destination / "post_kit").exists())
+        self.assertEqual(load(destination, "publish").platforms, ["youtube_shorts"])
+
     def test_passed_package(self):
         save(self.run, "qa", QAReport(checks=[Check(id="format", passed=True),
                                              Check(id="silence", passed=False, severity="warn")]))

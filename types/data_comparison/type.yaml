@@ -8,7 +8,7 @@ avoid_when: [比較条件をそろえられない数値, 因果関係を裏付�
 pipeline: data_animation
 timing: narration
 length:
-  youtube_shorts: {target: 70, min: 61, max: 90}
+  youtube_shorts: {target: 45, min: 30, max: 59}
   tiktok: {target: 70, min: 61, max: 90}
   x: {target: 70, max: 140}
 research: {required: true, min_sources: 1, recency_days: null}

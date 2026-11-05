@@ -8,7 +8,7 @@ avoid_when: [無許可または商用利用不可の配信, 文脈を歪める�
 pipeline: clipping
 timing: narration
 length:
-  youtube_shorts: {target: 70, min: 61, max: 90}
+  youtube_shorts: {target: 45, min: 30, max: 59}
   tiktok: {target: 70, min: 61, max: 90}
   x: {target: 70, max: 140}
 research:

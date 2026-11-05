@@ -8,7 +8,7 @@ avoid_when: [既存作品の登場人物や筋書きの模倣, 実在人物に�
 pipeline: generated_video
 timing: narration
 length:
-  youtube_shorts: {target: 70, min: 61, max: 90}
+  youtube_shorts: {target: 45, min: 30, max: 59}
   tiktok: {target: 70, min: 61, max: 90}
   x: {target: 70, max: 140}
 research: {required: false}

@@ -2,17 +2,32 @@
 # Subscription-only, unattended /make-video entry point. Dry runs have no side effects.
 set -euo pipefail
 
-usage() { echo 'usage: scripts/run_request.sh "<request>" [--slug s] (RUN_REQUEST_DRY=1 prints the command)'; }
+usage() {
+  echo 'usage: scripts/run_request.sh "<request>" [--slug s] (RUN_REQUEST_DRY=1 prints the command)'
+  echo '       scripts/run_request.sh --daily [--max-minutes N]   (daily autopost; see scripts/daily_post.sh)'
+}
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then usage; exit 0; fi
-if [[ $# -ne 1 && $# -ne 3 ]]; then usage >&2; exit 2; fi
-request=$1
-slug=video
-if [[ $# -eq 3 ]]; then
-  [[ $2 == --slug ]] || { usage >&2; exit 2; }
-  slug=$3
-fi
-if [[ -z ${request//[[:space:]]/} || ! $slug =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$ ]]; then
-  usage >&2; exit 2
+daily=0
+cap=
+if [[ ${1:-} == --daily ]]; then
+  daily=1
+  shift
+  if [[ $# -eq 2 && $1 == --max-minutes && $2 =~ ^[1-9][0-9]{0,3}$ ]]; then cap=$2
+  elif [[ $# -ne 0 ]]; then usage >&2; exit 2; fi
+  prompt=/daily-post
+  slug=daily
+else
+  if [[ $# -ne 1 && $# -ne 3 ]]; then usage >&2; exit 2; fi
+  request=$1
+  slug=video
+  if [[ $# -eq 3 ]]; then
+    [[ $2 == --slug ]] || { usage >&2; exit 2; }
+    slug=$3
+  fi
+  if [[ -z ${request//[[:space:]]/} || ! $slug =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$ ]]; then
+    usage >&2; exit 2
+  fi
+  prompt="/make-video $request"
 fi
 # Remove inherited credentials before any subprocess, and again after site settings.
 # OAuth subscription login stays available through Claude's normal account storage.
@@ -32,6 +47,8 @@ scrub_keys() {
 scrub_keys
 REPO=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd -- "$REPO"
+# The daily skill gets the repository path: the Bash tool may start elsewhere (shell profile).
+if [[ $daily == 1 ]]; then prompt="/daily-post $REPO"; fi
 if [[ ${RUN_REQUEST_DRY:-0} != 1 && -f scripts/site.sh ]]; then source scripts/site.sh; fi
 scrub_keys
 # Include the local Node installation while preserving caller-selected tools.
@@ -62,8 +79,14 @@ for tool in tools:
 PY
 )
 mapfile -t settings <<< "$settings_text"
-# VG_HEADLESS=1 marks an unattended run: vg refuses every publishing command in it.
-command=(timeout "${settings[0]}m" env VG_HEADLESS=1 claude -p "/make-video $request"
+minutes=${settings[0]}
+if [[ -n $cap && $cap -lt $minutes ]]; then minutes=$cap; fi
+# VG_HEADLESS=1 marks an unattended run: vg refuses every publishing command in it. The daily
+# runner adds VG_AUTOPOST=1, which allows only `vg daily publish` (private upload scheduled for
+# today's slot) when local/preferences.yaml autopost.enabled is true.
+marks=(VG_HEADLESS=1)
+if [[ $daily == 1 ]]; then marks+=(VG_AUTOPOST=1); fi
+command=(timeout --kill-after=60s "${minutes}m" env "${marks[@]}" claude -p "$prompt"
          --permission-mode acceptEdits --allowedTools "${settings[@]:2}" --output-format text)
 if [[ -n ${settings[1]} ]]; then command+=(--model "${settings[1]}"); fi
 

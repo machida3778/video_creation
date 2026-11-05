@@ -8,7 +8,7 @@ avoid_when: [根拠のない優劣付け, 年次や単位が異なるデータ�
 pipeline: narration_stills
 timing: narration
 length:
-  youtube_shorts: {target: 70, min: 61, max: 90}
+  youtube_shorts: {target: 45, min: 30, max: 59}
   tiktok: {target: 70, min: 61, max: 90}
   x: {target: 70, max: 140}
 research: {required: true, min_sources: 1, recency_days: null, source_scope: per_dataset}

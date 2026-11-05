@@ -19,3 +19,7 @@ node_modules/
 # claude local state
 /.claude/hooks/.usage_warned
 /.claude/settings.local.json
+# Daily request lists name produced topics: never track them, wherever they are kept.
+requests.md
+request.md
+requests.txt

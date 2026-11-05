@@ -37,8 +37,21 @@ class HeadlessPublishGuardTests(unittest.TestCase):
             self.assertEqual(cli.main(["publish", "youtube-privacy", "x:v1", "--privacy", "public", "--confirm"]), 2)
 
     def test_run_request_marks_headless(self):
-        script = (Path(__file__).resolve().parents[1] / "scripts" / "run_request.sh").read_text()
-        self.assertIn("env VG_HEADLESS=1 claude -p", script)
+        import os
+        import subprocess
+        script = Path(__file__).resolve().parents[1] / "scripts" / "run_request.sh"
+
+        def dry(*args):
+            env = dict(os.environ, RUN_REQUEST_DRY="1")
+            return subprocess.run(["bash", str(script), *args], env=env, capture_output=True, text=True,
+                                  check=True).stdout
+
+        request = dry("synthetic request", "--slug", "synthetic")
+        self.assertIn("VG_HEADLESS=1 claude -p", request)
+        self.assertNotIn("VG_AUTOPOST", request)
+        scheduled = dry("--daily", "--max-minutes", "30")
+        self.assertIn("timeout --kill-after=60s 30m env VG_HEADLESS=1 VG_AUTOPOST=1 claude -p /daily-post\\ /",
+                      scheduled)
 
 
 if __name__ == "__main__":

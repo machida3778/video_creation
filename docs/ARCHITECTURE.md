@@ -1,6 +1,6 @@
 # Architecture
 
-The harness turns a one-line request into vertical video candidates. An LLM agent writes validated JSON specifications; deterministic tools synthesize speech, assemble media, render, and check the result. A human selects the final version and decides whether to publish.
+The harness turns a one-line request into vertical video candidates. An LLM agent writes validated JSON specifications; deterministic tools synthesize speech, assemble media, render, and check the result. A human selects the final version and decides whether to publish, unless the opt-in daily autopost is enabled (see below).
 
 ## Constraints
 
@@ -23,7 +23,7 @@ The harness turns a one-line request into vertical video candidates. An LLM agen
 | Rendering | `vg render` | `final.mp4`, `final.srt` |
 | Quality checks | `vg qa` and agent review | `qa.json`, contact sheet |
 | Packaging | `vg package` | Candidate files and `publish.json` in `outbox/` |
-| Final selection and publication decision | Human | Selected candidate |
+| Final selection and publication decision | Human, or the opt-in daily autopost (`vg daily`) | Selected candidate, or one scheduled upload per day |
 
 Recipes in `types/<id>/type.yaml` define routing criteria, length limits, components, model capabilities, rights requirements and quality criteria. Planned recipes are not implemented backends. The initial implemented recipe is `trivia_explainer`.
 
@@ -42,6 +42,10 @@ Agents also review facts, pronunciation, visual coherence, originality, licences
 A run shares its brief, route and research across independent `variants/vN/` directories. Each candidate owns its script, voice settings, storyboard, licensed assets and derived outputs. `vg compare` prepares a comparison for human selection.
 
 `vg mix` combines the script, voice, visuals and BGM from selected variants, records provenance, preserves asset licence records, and regenerates dependent outputs. Personal feedback belongs in the private run or `local/preferences.yaml`.
+
+## Daily autopost (opt-in)
+
+`scripts/daily_post.sh` runs from cron. When `vg daily status --check` reports that today's slot still needs a video, it starts a headless Claude session with `/daily-post` (`VG_HEADLESS=1 VG_AUTOPOST=1`). The session takes the first unchecked item of the user's Markdown checklist (`autopost.list`, git-ignored), or adds one from the user's past items and the channel's statistics when the list is empty, and produces one variant with the normal stages and QA gates. `vg daily publish` is the only publishing command allowed in that session: it uploads privately with `publishAt` set to the day's slot (weekday and day-off times in `autopost`, Japanese holidays via `jpholiday`), then ticks the item and records the URL. Failures are noted under the item and the next attempt resumes the same run; a slot that cannot be met is skipped rather than posted late.
 
 ## Compute and site configuration
 

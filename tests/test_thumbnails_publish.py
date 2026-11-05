@@ -237,7 +237,7 @@ class YoutubeTests(unittest.TestCase):
                 youtube.upload(self.variant)
 
     def test_packaged_cover_choice_copy_and_comparison(self):
-        media.save(self.variant, "brief", Brief(request="synthetic", topic="synthetic"))
+        media.save(self.variant, "brief", Brief(request="synthetic", topic="synthetic", platforms=["youtube_shorts", "x"]))
         media.save(self.variant, "script", Script(title="synthetic", lines=[Line(id="L1", text="最初の文。")]))
         media.save(self.variant, "storyboard", Storyboard(type_id="synthetic", scenes=[
             Scene(id="C1", line_ids=["L1"], component="background")]))

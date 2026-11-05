@@ -161,7 +161,11 @@ def package(run_dir) -> Path:
         shutil.rmtree(destination / "thumbs", ignore_errors=True)
         for name in ("covers.json", "covers_report.json"):
             (destination / name).unlink(missing_ok=True)
-    post_kit(destination, publish)
+    # Manual TikTok/X kits only when the brief targets those platforms (YouTube-only since 2026-11-05).
+    if {"tiktok", "x"} & set(publish.platforms):
+        post_kit(destination, publish)
+    else:
+        shutil.rmtree(destination / "post_kit", ignore_errors=True)
     return destination
 
 
@@ -214,7 +218,9 @@ def compare(run: Path, *, outbox: Path | None = None) -> Path:
                  if (packaged / "thumbs" / f"{c.id}.jpg").is_file()
                  else f"{c.id}: {c.text.replace(chr(10), ' ')}（未出力・要修正）") +
                 f"（回収: {c.line_id}{'・現在の表紙' if c.id == chosen else ''}）" for c in options) +
-                f"\n\n[一覧]({variant.name}/thumbs/sheet.jpg) / [手動投稿キット]({variant.name}/post_kit/README.txt)")
+                f"\n\n[一覧]({variant.name}/thumbs/sheet.jpg)" + (
+                    f" / [手動投稿キット]({variant.name}/post_kit/README.txt)"
+                    if (packaged / "post_kit" / "README.txt").is_file() else ""))
     sections.append("## 組み合わせの頼み方\n\n"
                     "例: 「v2のBGMを用いてv3の動画に合わせ、合成音声はv1」\n\n"
                     f"```sh\nvg mix {shlex.quote(str(run))} --base v3 --bgm v2 --voice v1\n```\n\n"

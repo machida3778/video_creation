@@ -8,7 +8,7 @@ avoid_when: [実在の私信や掲示板投稿の転載, 特定人物への批�
 pipeline: dialogue
 timing: narration
 length:
-  youtube_shorts: {target: 70, min: 61, max: 90}
+  youtube_shorts: {target: 45, min: 30, max: 59}
   tiktok: {target: 70, min: 61, max: 90}
   x: {target: 70, max: 140}
 research: {required: false}
