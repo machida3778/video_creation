@@ -542,7 +542,7 @@ def history(limit: int = 30, cfg: dict | None = None) -> dict:
                 days = max((today - published).total_seconds() / 86400, 1 / 24)
                 views = int(stats.get("viewCount", 0))
                 out["videos"].append({
-                    "title": snippet["title"], "published": snippet["publishedAt"],
+                    "id": video["id"], "title": snippet["title"], "published": snippet["publishedAt"],
                     "privacy": status_.get("privacyStatus"), "publish_at": status_.get("publishAt"),
                     "seconds": _seconds(video.get("contentDetails", {}).get("duration", "")),
                     "views": views, "likes": int(stats.get("likeCount", 0)),
@@ -550,4 +550,33 @@ def history(limit: int = 30, cfg: dict | None = None) -> dict:
                     "views_per_day": round(views / days, 1)})
     except Exception as exc:  # trends still work from the list alone
         out["api_error"] = f"{type(exc).__name__}: {exc}"
+    if out["videos"]:
+        try:
+            by_id = _analytics([v["id"] for v in out["videos"]], min(v["published"][:10] for v in out["videos"]))
+            for video in out["videos"]:
+                video.update(by_id.get(video["id"], {}))
+        except Exception as exc:  # the permission may not be granted yet; views/likes still work
+            out["analytics_error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
+ANALYTICS_METRICS = {"averageViewPercentage": "avg_view_percent", "averageViewDuration": "avg_view_seconds",
+                     "shares": "shares", "subscribersGained": "subscribers_gained"}
+
+
+def _analytics(video_ids: list[str], start: str) -> dict[str, dict]:
+    """Retention and sharing per video from the YouTube Analytics API (about two days behind)."""
+    from .publish_youtube import analytics_service
+
+    yta = analytics_service()
+    out: dict[str, dict] = {}
+    for first in range(0, len(video_ids), 200):
+        ids = video_ids[first:first + 200]
+        response = yta.reports().query(ids="channel==MINE", startDate=start, endDate=now().date().isoformat(),
+                                       metrics=",".join(ANALYTICS_METRICS), dimensions="video",
+                                       filters="video==" + ",".join(ids), maxResults=200).execute()
+        names = [header["name"] for header in response.get("columnHeaders", [])]
+        for row in response.get("rows", []):
+            values = dict(zip(names, row))
+            out[values["video"]] = {ANALYTICS_METRICS[key]: values[key] for key in ANALYTICS_METRICS if key in values}
     return out

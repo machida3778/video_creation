@@ -17,7 +17,7 @@ Unattended: never ask questions. The user opted in to one automatic upload per d
 - If it returns `run`, resume that run for the same request: `vg daily start "<request>" --run <run>`, then `vg status <run>` / `vg status <run>:v1` and continue from the first unfinished or failed stage (skip step 3.1).
 - If it returns a `request` without `run`, use it verbatim (`vg daily start` refuses text that is not an unchecked list item).
 - If it returns `{"empty": true}`, add one item yourself:
-  1. `vg daily history` — the user's past list items (their interests and phrasing) and the channel's uploads with views, likes and views per day.
+  1. `vg daily history` — the user's past list items (their interests and phrasing) and the channel's uploads with views, likes, views per day and, when the analytics permission is granted, average percentage viewed, average view seconds, shares and subscribers gained (analytics lag about two days; `analytics_error` means only views and likes are available). Weigh retention (average percentage viewed) and shares above raw views: they show which questions held attention.
   2. Choose one new request that fits the channel concept in `REPO/local/preferences.yaml` (`channel`) and follows what worked: the subject areas, video types and question styles of the better-performing videos and of the user's own items. With little data (fewer than five videos with views), stay close to the user's items.
   3. It must be a new question: not a topic or angle already produced (titles in `outbox/*/publish.json`, `outbox/*/*/publish.json`, `runs/*/script.json` and `runs/*/variants/*/script.json`). Low risk only: no news or current events, no medical, health, legal or financial advice, no real private persons, nothing needing realistic depictions of real people.
   4. Write it like the user's items (one Japanese line), then `vg daily add "<request>" --reason "<which trend it follows, one line>"` and use it.
@@ -29,6 +29,7 @@ Unattended: never ask questions. The user opted in to one automatic upload per d
 ## 4. Self-review (nobody checks before the slot)
 - `vg sheet RUN:v1` and look at the contact sheet, `cover_small.jpg` and the timing/audio summary.
 - Every image must match its narration line: the right object and situation, no garbled letters or meaningless numbers, no realistic real person. Fix a mismatch by changing that scene's prompt or seed and rerunning from `assets` (then `vg make RUN:v1 --from timeline`).
+- Score the cover options with the rubric in `docs/THUMBNAILS.md` (「惹きつける見出し」) and make sure the strongest is chosen (`chosen_id` in `covers_report.json`, then `vg package RUN:v1`). A cover that states the answer, lacks the subject or shows the wrong part of the object is not acceptable: rewrite `covers.json` and rerun `vg thumbnail RUN:v1`.
 - Re-read `publish.json`: the title and description must be accurate and match the video; sources and credits present.
 - If a problem cannot be fixed in two attempts, do not publish (step 6).
 

@@ -15,6 +15,9 @@ from .variants import local_file
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
           "https://www.googleapis.com/auth/youtube.force-ssl"]
+# Read-only channel analytics (retention, shares) for choosing topics; requested by `vg publish auth youtube`.
+ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"
+AUTH_SCOPES = [*SCOPES, ANALYTICS_SCOPE]
 CLIENT_SECRET = ROOT / "local/youtube/client_secret.json"
 TOKEN = ROOT / "local/youtube/token.json"
 
@@ -38,27 +41,44 @@ def _save_json(path: Path, data, *, secret=False):
 def authorize(client_secret=CLIENT_SECRET, token=TOKEN):
     from google_auth_oauthlib.flow import InstalledAppFlow
 
-    flow = InstalledAppFlow.from_client_secrets_file(str(client_secret), scopes=SCOPES)
+    flow = InstalledAppFlow.from_client_secrets_file(str(client_secret), scopes=AUTH_SCOPES)
     credentials = flow.run_local_server(port=8765, open_browser=False)
     _save_json(Path(token), json.loads(credentials.to_json()), secret=True)
     return credentials
 
 
-def _service(token=TOKEN):
+def _credentials(token=TOKEN):
+    """Stored OAuth credentials with the scopes they were granted (older tokens lack analytics)."""
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
-    from googleapiclient.discovery import build
 
     token = Path(token)
     if not token.is_file():
         raise ValueError("OAuth token missing; run vg publish auth youtube first")
-    credentials = Credentials.from_authorized_user_file(str(token), SCOPES)
+    credentials = Credentials.from_authorized_user_file(str(token))
     if credentials.expired and credentials.refresh_token:
         credentials.refresh(Request())
         _save_json(token, json.loads(credentials.to_json()), secret=True)
     if not credentials.valid:
         raise ValueError("OAuth token invalid; run vg publish auth youtube again")
-    return build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    return credentials
+
+
+def _service(token=TOKEN):
+    from googleapiclient.discovery import build
+
+    return build("youtube", "v3", credentials=_credentials(token), cache_discovery=False)
+
+
+def analytics_service(token=TOKEN):
+    """YouTube Analytics API v2 client; needs a token authorized with ANALYTICS_SCOPE."""
+    from googleapiclient.discovery import build
+
+    credentials = _credentials(token)
+    if ANALYTICS_SCOPE not in (credentials.scopes or []):
+        raise ValueError("YouTube Analytics permission missing: run `vg publish auth youtube` again "
+                         "(and enable the YouTube Analytics API for the OAuth client's Cloud project)")
+    return build("youtubeAnalytics", "v2", credentials=credentials, cache_discovery=False)
 
 
 def _media_upload(path, mimetype, *, resumable=False):

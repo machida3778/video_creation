@@ -306,7 +306,8 @@ class YoutubeTests(unittest.TestCase):
                                       "google_auth_oauthlib.flow": flow_module}):
             youtube.authorize(self.root / "client.json", token)
         flow.run_local_server.assert_called_once_with(port=8765, open_browser=False)
-        self.assertEqual(flow_module.InstalledAppFlow.from_client_secrets_file.call_args.kwargs["scopes"], youtube.SCOPES)
+        self.assertEqual(flow_module.InstalledAppFlow.from_client_secrets_file.call_args.kwargs["scopes"], youtube.AUTH_SCOPES)
+        self.assertIn(youtube.ANALYTICS_SCOPE, youtube.AUTH_SCOPES)
         self.assertEqual(token.stat().st_mode & 0o777, 0o600)
 
     def test_import_and_dry_run_without_google_libraries(self):
