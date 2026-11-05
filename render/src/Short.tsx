@@ -30,13 +30,19 @@ export const Short: React.FC<ShortProps> = ({timeline}) => {
       {timeline.audio.map((a, i) => {
         const gain = dbToGain(a.gain_db);
         const start = frame(a.start);
+        const frames = Math.max(1, Math.min(frame(a.duration ?? timeline.duration), frame(timeline.duration) - start));
+        const fadeIn = (a.fade_in ?? 0) * fps;
+        const fadeOut = (a.fade_out ?? 0) * fps;
         return (
-          <Sequence key={`a${i}`} from={start} layout="none">
+          <Sequence key={`a${i}`} from={start} durationInFrames={frames} layout="none">
             <Audio
               src={staticFile(a.src)}
-              volume={(f) =>
-                a.duck_under_voice && voiceSpans.some(([s, e]) => f + start >= s && f + start < e) ? gain * 0.35 : gain
-              }
+              volume={(f) => {
+                const fade = Math.min(1, fadeIn > 0 ? f / fadeIn : 1,
+                  fadeOut > 0 ? Math.max(0, frames - 1 - f) / fadeOut : 1);
+                const duck = a.duck_under_voice && voiceSpans.some(([s, e]) => f + start >= s && f + start < e);
+                return gain * fade * (duck ? 0.35 : 1);
+              }}
             />
           </Sequence>
         );

@@ -169,7 +169,7 @@ class Music(BaseModel):
     track: str | None = None        # config/bgm.yaml track id (vg assets copies it in and records the licence)
     asset: str | None = None        # manifest asset id (set by vg assets for library tracks)
     prompt: str | None = None
-    gain_db: float = -20.0  # under the voice; ducked further while someone speaks
+    gain_db: float = -20.0  # legacy hint; render measures and sets the voice-relative gain
 
 
 class Storyboard(Spec):
@@ -277,6 +277,9 @@ class AudioClip(BaseModel):
     kind: Literal["voice", "music", "sfx"]
     gain_db: float = 0.0
     duck_under_voice: bool = False
+    fade_in: float = Field(0.0, ge=0, allow_inf_nan=False)  # seconds
+    fade_out: float = Field(0.0, ge=0, allow_inf_nan=False)
+    duration: float | None = Field(None, gt=0, allow_inf_nan=False)  # measured source seconds
 
 
 class Timeline(Spec):
@@ -332,12 +335,22 @@ class Style(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     first_text_max_sec: float = Field(0.3, ge=0)
     first_speech_max_sec: float = Field(0.3, ge=0)
-    max_static_sec: float = Field(3.5, gt=0)
+    max_static_sec: float = Field(6.0, gt=0)
     min_speech_cps: float = Field(7.0, ge=0)
     caption_coverage_min: float = Field(0.85, ge=0, le=1)
     originality_max_similarity: float = Field(0.6, ge=0, le=1)
-    sfx_gain_db: float = -14
+    bgm_below_voice_db: float = Field(10.0, ge=0)
+    sfx_below_voice_db: float = Field(6.0, ge=0)
+    bgm_fade_in_sec: float = Field(0.3, ge=0)
+    bgm_fade_out_sec: float = Field(1.0, ge=0)
     sfx_max_per_10s: int = Field(3, ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_audio_keys(cls, data):
+        if isinstance(data, dict):
+            data = {key: value for key, value in data.items() if key != "sfx_gain_db"}
+        return data
 
 
 class SfxSpec(BaseModel):

@@ -78,6 +78,42 @@ def check_loudness(run_dir) -> Check:
                  detail=f"integrated={integrated:.2f} LUFS (target -14 ±1.5); true peak={peak:.2f} dBTP (max -1.0)")
 
 
+def check_mix(run_dir, style=None) -> Check:
+    """Validate measured source levels plus applied gains against the voice reference."""
+    style = registry.load_style() if style is None else style
+    audio = [a for a in load(run_dir, "timeline").audio if a.kind != "voice"]
+    path = Path(run_dir) / "render" / "mix.json"
+    passed, detail = True, "no music or SFX"
+    if audio:
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+            voice = report["voice"]["level_db"]
+            if not isinstance(voice, (int, float)) or not math.isfinite(voice):
+                raise ValueError("voice level unavailable")
+            entries = report["clips"]
+            if len(entries) != len(audio):
+                raise ValueError("mix entries do not match timeline")
+            details = []
+            for clip, entry in zip(audio, entries):
+                if (clip.kind, clip.src, clip.start, clip.gain_db) != (
+                        entry["kind"], entry["src"], entry["start"], entry["gain_db"]):
+                    raise ValueError("mix entries do not match timeline")
+                level = entry["level_db"]
+                if not isinstance(level, (int, float)) or not math.isfinite(level):
+                    raise ValueError(f"{clip.kind} level unavailable")
+                offset = voice - (level + clip.gain_db)
+                target = style["bgm_below_voice_db" if clip.kind == "music" else "sfx_below_voice_db"]
+                tolerance = 2 if clip.kind == "music" else 3
+                passed &= math.isfinite(offset) and abs(offset - target) <= tolerance + 1e-6
+                if clip.kind == "music":
+                    passed &= not clip.duck_under_voice
+                details.append(f"{clip.kind} {clip.src}: {offset:.2f} dB below voice (target {target:g} ±{tolerance})")
+            detail = "; ".join(details)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            passed, detail = False, f"mix unavailable/invalid ({exc}); rerender to measure relative audio levels"
+    return Check(id="mix", passed=bool(passed), severity="warn", redo_stage="render", detail=detail)
+
+
 def check_black_frames(run_dir, info=None) -> Check:
     duration = _duration(probe(_final(run_dir)) if info is None else info)
     result = run([str(FFMPEG), "-hide_banner", "-nostdin", "-i", str(_final(run_dir)),
@@ -279,7 +315,7 @@ def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
     info = probe(_final(run_dir))
     style = registry.load_style()
     metrics = analyze_run(run_dir)
-    return [check_format(run_dir, info), check_duration(run_dir, info), check_loudness(run_dir),
+    return [check_format(run_dir, info), check_duration(run_dir, info), check_loudness(run_dir), check_mix(run_dir, style),
             check_black_frames(run_dir, info), check_silence(run_dir, info), check_safe_area(run_dir),
             check_caption_timing(run_dir, _duration(info)), check_hook(metrics, style),
             check_tempo(run_dir, metrics, style), check_speech_rate(metrics, style),

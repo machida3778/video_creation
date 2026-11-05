@@ -1,9 +1,12 @@
 # Tempo and presentation rules; seconds are measured on the final timeline.
 first_text_max_sec: 0.3       # Caption or title must introduce the hook immediately.
 first_speech_max_sec: 0.3     # Narration should start with the hook.
-max_static_sec: 3.5          # Longest gap between clip starts or internal framing cuts.
+max_static_sec: 6.0          # Longest gap between new base images/components.
 min_speech_cps: 7.0         # Display characters per second of speech (not kana readings).
 caption_coverage_min: 0.85  # Fraction with a caption or title card visible; overlaps count once.
 originality_max_similarity: 0.6  # Maximum character-3-gram Jaccard similarity to other runs.
-sfx_gain_db: -14            # Effects sit below narration.
+bgm_below_voice_db: 10     # Measured music level relative to the concatenated voice.
+sfx_below_voice_db: 6      # Measured effect level relative to the concatenated voice.
+bgm_fade_in_sec: 0.3
+bgm_fade_out_sec: 1.0
 sfx_max_per_10s: 3          # Maximum effect starts in any half-open 10-second window.

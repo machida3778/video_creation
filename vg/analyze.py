@@ -113,20 +113,9 @@ def display_characters(text: str) -> int:
 
 
 def analyze_run(run_dir) -> dict:
-    """Read specifications only; motion itself does not substitute for an explicit cut."""
+    """Count base clip boundaries; overlays and motion within an image do not reset tempo."""
     timeline, timings, script = (load(run_dir, name) for name in ("timeline", "timings", "script"))
-    changes = {clip.start for clip in timeline.clips}
-    for clip in timeline.clips:
-        cut = clip.props.get("cut_sec", 0)
-        if (clip.component == "ken_burns_image" and not isinstance(cut, bool)
-                and isinstance(cut, (int, float)) and math.isfinite(cut) and cut > 0):
-            # The renderer rounds cut_sec to frames before applying internal cuts.
-            frames = math.floor(cut * timeline.fps + 0.5)
-            if frames > 0:
-                for offset in range(frames, math.ceil((clip.end - clip.start) * timeline.fps), frames):
-                    t = clip.start + offset / timeline.fps
-                    if t < clip.end - 1e-6:
-                        changes.add(t)
+    changes = {clip.start for clip in timeline.clips if clip.layer == 0}
     text_spans = [(c.start, c.end) for c in timeline.captions if c.text.strip()]
     text_spans.extend((c.start, c.end) for c in timeline.clips
                       if c.component in TITLE_COMPONENTS and isinstance(c.props.get("text"), str)

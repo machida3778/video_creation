@@ -60,7 +60,7 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
     scenes = [sc for sc in board.scenes if sc.line_ids]
     starts = [0.0] + [by_line[sc.line_ids[0]].start for sc in scenes[1:]]
     clips, captions, effects = [], [], []
-    sfx_gain = load_style()["sfx_gain_db"]
+    mix_style = load_style()
     for i, sc in enumerate(scenes):
         start, end = starts[i], (starts[i + 1] if i + 1 < len(starts) else duration)
         props = {k: v for k, v in sc.props.items() if k not in ("overlays", "captions", "sfx")}
@@ -70,7 +70,7 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
                 raise ValueError(f"scene {sc.id}: SFX '{effect_id}' not in manifest")
             if start + offset >= end:
                 raise ValueError(f"scene {sc.id}: SFX offset {offset} outside scene duration {end-start}")
-            effects.append(AudioClip(start=start + offset, src=assets[key], kind="sfx", gain_db=sfx_gain))
+            effects.append(AudioClip(start=start + offset, src=assets[key], kind="sfx"))
         ref = sc.visual.ref or props.pop("src_asset", None)
         if ref:
             if ref not in assets:
@@ -97,6 +97,7 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
         if board.music.asset not in assets:
             raise ValueError(f"music asset '{board.music.asset}' not in manifest")
         audio.append(AudioClip(start=0.0, src=assets[board.music.asset], kind="music",
-                               gain_db=board.music.gain_db, duck_under_voice=True))
+                               gain_db=board.music.gain_db, duck_under_voice=False,
+                               fade_in=mix_style["bgm_fade_in_sec"], fade_out=mix_style["bgm_fade_out_sec"]))
     return Timeline(fps=fps, duration=duration, clips=clips,
                     captions=sorted(captions, key=lambda c: c.start), audio=audio)

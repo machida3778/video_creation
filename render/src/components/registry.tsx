@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
 import type {CharacterPairProps, Clip, CountdownProps, RankCardProps, RankScrollProps} from '../types';
 import {CaptionLines, FONT} from './Caption';
 import {CharacterPair} from './CharacterPair';
@@ -16,40 +16,19 @@ const Background: React.FC<{props: P}> = ({props}) => (
   />
 );
 
-// Framings cycled by `cut_sec`: each cut jumps to a new zoom/pan so the picture changes every few seconds
-// without a new image (retention: a visual change every 2-3 s).
-const CUTS: {zoom: [number, number]; pan: string}[] = [
-  {zoom: [1.0, 1.1], pan: 'none'},
-  {zoom: [1.28, 1.2], pan: 'left'},
-  {zoom: [1.12, 1.22], pan: 'up'},
-  {zoom: [1.35, 1.28], pan: 'right'},
-];
-
-// Still image with a slow zoom/pan over the clip ("Ken Burns"); with props.cut_sec it also cuts between framings.
+// One continuous eased move per image. Legacy framing-cut and punch props are ignored.
 const KenBurnsImage: React.FC<{props: P; frames: number}> = ({props, frames}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const cutFrames = typeof props.cut_sec === 'number' && props.cut_sec > 0 ? Math.round(props.cut_sec * fps) : 0;
-  const k = cutFrames ? Math.floor(frame / cutFrames) : 0;
-  const local = cutFrames ? frame - k * cutFrames : frame;
-  const span = cutFrames ? Math.min(cutFrames, frames - k * cutFrames) : frames;
-  const t = interpolate(local, [0, Math.max(1, span - 1)], [0, 1], {extrapolateRight: 'clamp'});
-  const base = Array.isArray(props.zoom) ? (props.zoom as [number, number]) : [1.0, 1.12];
-  const cut = cutFrames ? CUTS[(k + num(props.cut_offset, 0)) % CUTS.length] : {zoom: base, pan: str(props.pan, 'none')};
-  const [z0, z1] = k === 0 && !cutFrames ? base : cut.zoom;
-  const pan = cut.pan;
+  const t = interpolate(frame, [0, Math.max(1, frames - 1)], [0, 1], {
+    easing: Easing.inOut(Easing.cubic), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  const base = Array.isArray(props.zoom) ? props.zoom : [1.0, 1.12];
+  const zoom = (value: unknown, fallback: number) =>
+    Math.min(1.15, Math.max(1.0, typeof value === 'number' && Number.isFinite(value) ? value : fallback));
+  const [z0, z1] = [zoom(base[0], 1.0), zoom(base[1], 1.12)];
+  const pan = str(props.pan, 'none');
   const d = 40 * t;
   const shift = {left: [-d, 0], right: [d, 0], up: [0, -d], down: [0, d], none: [0, 0]}[pan] ?? [0, 0];
-  const punches = Array.isArray(props.punch) ? props.punch : [];
-  const punch = punches.reduce<number>((scale, at: unknown) => {
-    if (typeof at !== 'number' || !Number.isFinite(at) || at < 0) return scale;
-    const elapsed = frame / fps - at;
-    if (elapsed < 0 || elapsed > 0.8) return scale;
-    // A quick 0.2 s push, followed by a smooth 0.6 s return. Overlaps never compound.
-    const progress = elapsed <= 0.2 ? elapsed / 0.2 : (0.8 - elapsed) / 0.6;
-    const eased = progress * progress * (3 - 2 * progress);
-    return Math.max(scale, 1 + 0.12 * eased);
-  }, 1);
   return (
     <AbsoluteFill style={{overflow: 'hidden'}}>
       <Img
@@ -58,7 +37,7 @@ const KenBurnsImage: React.FC<{props: P; frames: number}> = ({props, frames}) =>
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          transform: `scale(${(z0 + (z1 - z0) * t) * punch}) translate(${shift[0]}px, ${shift[1]}px)`,
+          transform: `translate(${shift[0]}px, ${shift[1]}px) scale(${z0 + (z1 - z0) * t})`,
         }}
       />
     </AbsoluteFill>

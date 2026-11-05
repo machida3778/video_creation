@@ -37,6 +37,9 @@ export type AudioClip = {
   kind: 'voice' | 'music' | 'sfx';
   gain_db: number;
   duck_under_voice: boolean;
+  fade_in?: number; // seconds
+  fade_out?: number;
+  duration?: number | null; // measured source seconds; absent in legacy timelines
 };
 
 export type Timeline = {

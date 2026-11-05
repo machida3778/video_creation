@@ -37,22 +37,28 @@ class SpecTests(unittest.TestCase):
 
     def test_style_defaults_partial_config_and_validation(self):
         self.assertEqual(self.style, registry.load_style())
+        for key, value in {"max_static_sec": 6, "bgm_below_voice_db": 10, "sfx_below_voice_db": 6,
+                           "bgm_fade_in_sec": 0.3, "bgm_fade_out_sec": 1}.items():
+            self.assertEqual(self.style[key], value)
         path = self.root / "style.yaml"
-        path.write_text("max_static_sec: 2\nsfx_gain_db: -19\n", encoding="utf-8")
+        path.write_text("max_static_sec: 2\nsfx_gain_db: -19\nbgm_below_voice_db: 8\n", encoding="utf-8")
         loaded = registry.load_style(path)
         self.assertEqual(loaded["max_static_sec"], 2)
-        self.assertEqual(loaded["sfx_gain_db"], -19)
+        self.assertNotIn("sfx_gain_db", loaded)
+        self.assertEqual(loaded["sfx_below_voice_db"], 6)
+        self.assertEqual(loaded["bgm_below_voice_db"], 8)
         self.assertEqual(loaded["min_speech_cps"], 7)
         for text in ["[]", "max_static_sec: 0", "caption_coverage_min: 1.1", "min_speech_cps: .nan",
-                     "sfx_max_per_10s: -1", "unknown: 1"]:
+                     "sfx_max_per_10s: -1", "unknown: 1", "bgm_below_voice_db: -1",
+                     "sfx_below_voice_db: .inf", "bgm_fade_in_sec: -1", "bgm_fade_out_sec: .nan"]:
             path.write_text(text, encoding="utf-8")
             with self.subTest(text=text), self.assertRaises(ValueError):
                 registry.load_style(path)
 
-    def test_spec_measurements_union_characters_and_internal_cuts(self):
+    def test_spec_measurements_union_characters_and_ignored_internal_cuts(self):
         result = analyze.analyze_run(self.run)
-        self.assertEqual(result["visual_change_times"], [0, 2.5, 5, 7.5])
-        self.assertEqual(result["visual_intervals"]["max_sec"], 2.5)
+        self.assertEqual(result["visual_change_times"], [0])
+        self.assertEqual(result["visual_intervals"]["max_sec"], 10)
         self.assertEqual(result["first_text_sec"], 0)
         self.assertEqual(result["first_speech_sec"], 0.3)
         self.assertAlmostEqual(result["caption_coverage"], 0.85)
@@ -61,21 +67,23 @@ class SpecTests(unittest.TestCase):
         self.assertAlmostEqual(result["speech_cps"], 96 / 9)
         self.assertEqual(result["mean_caption_characters"], 4)
 
-    def test_frame_rounding_and_empty_text(self):
-        self.timeline.clips = [Clip(start=0, end=1, component="ken_burns_image", props={"cut_sec": 0.15}),
-                               Clip(start=0, end=1, component="title_card", props={"text": None})]
+    def test_legacy_motion_props_and_overlays_do_not_reset_tempo(self):
+        self.timeline.clips = [Clip(start=0, end=10, component="ken_burns_image",
+                                    props={"cut_sec": 0.15, "cut_offset": 2, "punch": [1, 4, 7]}),
+                               Clip(start=1, end=2, layer=1, component="title_card", props={"text": None})]
         self.timeline.captions = []
         media.save(self.run, "timeline", self.timeline)
         result = analyze.analyze_run(self.run)
-        self.assertAlmostEqual(result["visual_change_times"][1], 5 / 30)
-        self.assertEqual(result["visual_intervals"]["max_sec"], 9 + 5 / 30)
+        self.assertEqual(result["visual_change_times"], [0])
+        self.assertEqual(result["visual_intervals"]["max_sec"], 10)
         self.assertIsNone(result["first_text_sec"])
         self.assertEqual(result["caption_coverage"], 0)
         self.assertEqual(result["mean_caption_characters"], 0)
-        self.timeline.clips[0].props["cut_sec"] = True
-        self.timeline.clips[0].end = 10
+        self.timeline.clips[0].end = 5
+        self.timeline.clips.append(Clip(start=5, end=10, component="ken_burns_image", props={"src": "new.png"}))
         media.save(self.run, "timeline", self.timeline)
-        self.assertEqual(analyze.analyze_run(self.run)["visual_intervals"]["max_sec"], 10)
+        self.assertEqual(analyze.analyze_run(self.run)["visual_change_times"], [0, 5])
+        self.assertEqual(analyze.analyze_run(self.run)["visual_intervals"]["max_sec"], 5)
 
     def test_intervals_include_edges_and_nearest_rank_p90(self):
         result = analyze.interval_stats([2, 3, 3], 10)
@@ -102,6 +110,12 @@ class SpecTests(unittest.TestCase):
         self.assertEqual(metrics["speech_cps"], 0)
 
     def test_tempo_decision_uses_spec_not_pixels(self):
+        metrics = analyze.analyze_run(self.run)
+        with patch.object(qa, "scene_changes", return_value=list(range(1, 10))):
+            self.assertFalse(qa.check_tempo(self.run, metrics, self.style).passed)
+        self.timeline.clips[0].end = 5
+        self.timeline.clips.append(Clip(start=5, end=10, component="background"))
+        media.save(self.run, "timeline", self.timeline)
         metrics = analyze.analyze_run(self.run)
         with patch.object(qa, "scene_changes", return_value=[]):
             check = qa.check_tempo(self.run, metrics, self.style)
@@ -286,11 +300,10 @@ class SyntheticMediaTests(unittest.TestCase):
             self.assertEqual(asset.license, "original (procedurally generated by vg sfx)")
             self.assertTrue(asset.commercial_ok)
             self.assertTrue((run_dir / asset.path).is_file())
-        with patch("vg.timeline.load_style", return_value={"sfx_gain_db": -19}):
-            timeline = build(script, timings, board, manifest)
+        timeline = build(script, timings, board, manifest)
         effects = [a for a in timeline.audio if a.kind == "sfx"]
         self.assertEqual([a.start for a in effects], [0, 2.25, 3, 4])
-        self.assertTrue(all(a.gain_db == -19 for a in effects))
+        self.assertTrue(all(a.gain_db == 0 for a in effects))  # render sets measured relative gains
         self.assertTrue(all("sfx" not in c.props for c in timeline.clips))
         self.assertEqual(len([a for a in timeline.audio if a.kind == "voice"]), 2)
         with self.assertRaisesRegex(ValueError, "not in manifest"):

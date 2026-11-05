@@ -7,7 +7,8 @@ import os
 from pathlib import Path
 import re
 
-from .media import FFMPEG, ROOT, load, run, scrubbed_env
+from .media import FFMPEG, ROOT, load, run, save, scrubbed_env
+from .mix import prepare_mix
 
 
 def _timestamp(seconds):
@@ -48,16 +49,18 @@ def loudnorm(src, dst):
 
 
 def render(run_dir, concurrency=None) -> Path:
+    concurrency = 8 if concurrency is None else concurrency
+    if not isinstance(concurrency, int) or concurrency < 1:
+        raise ValueError("concurrency must be a positive integer")
     run_dir = Path(run_dir).resolve()
     timeline = load(run_dir, "timeline")
+    prepare_mix(run_dir, timeline)
+    save(run_dir, "timeline", timeline)
     render_dir = run_dir / "render"
     render_dir.mkdir(parents=True, exist_ok=True)
     props = render_dir / "props.json"
     props.write_text(json.dumps({"timeline": timeline.model_dump(mode="json")},
                                 ensure_ascii=False, indent=2), encoding="utf-8")
-    concurrency = 8 if concurrency is None else concurrency
-    if not isinstance(concurrency, int) or concurrency < 1:
-        raise ValueError("concurrency must be a positive integer")
     env = scrubbed_env()
     env["PATH"] = str(Path.home() / ".local/opt/node/bin") + os.pathsep + env.get("PATH", "")
     raw = render_dir / "raw.mp4"
