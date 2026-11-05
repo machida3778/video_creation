@@ -538,6 +538,8 @@ def history(limit: int = 30, cfg: dict | None = None) -> dict:
                                         id=",".join(ids[start_index:start_index + 50])).execute()
             for video in response.get("items", []):
                 stats, snippet, status_ = video.get("statistics", {}), video["snippet"], video.get("status", {})
+                if status_.get("privacyStatus") == "private" and not status_.get("publishAt"):
+                    continue  # old hidden uploads are not part of the channel's current trend
                 published = datetime.fromisoformat(snippet["publishedAt"].replace("Z", "+00:00"))
                 days = max((today - published).total_seconds() / 86400, 1 / 24)
                 views = int(stats.get("viewCount", 0))

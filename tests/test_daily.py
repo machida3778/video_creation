@@ -335,12 +335,15 @@ class DailyTest(unittest.TestCase):
         video = {"id": "v1", "snippet": {"title": "タイトルA", "publishedAt": "2026-11-04T09:00:00Z"},
                  "statistics": {"viewCount": "10", "likeCount": "2"}, "contentDetails": {"duration": "PT45S"},
                  "status": {"privacyStatus": "public"}}
+        hidden = {"id": "old", "snippet": {"title": "古い非公開", "publishedAt": "2017-01-01T00:00:00Z"},
+                  "statistics": {"viewCount": "200"}, "contentDetails": {"duration": "PT48S"},
+                  "status": {"privacyStatus": "private"}}
         youtube_api = SimpleNamespace(
             channels=lambda: SimpleNamespace(list=lambda **kw: Call(
                 {"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UU"}}}]})),
             playlistItems=lambda: SimpleNamespace(list=lambda **kw: Call(
                 {"items": [{"contentDetails": {"videoId": "v1"}}]})),
-            videos=lambda: SimpleNamespace(list=lambda **kw: Call({"items": [video]})))
+            videos=lambda: SimpleNamespace(list=lambda **kw: Call({"items": [video, hidden]})))
         queries = []
 
         def query(**kw):
@@ -352,6 +355,7 @@ class DailyTest(unittest.TestCase):
         with patch("vg.publish_youtube._service", return_value=youtube_api), \
                 patch("vg.publish_youtube.analytics_service", return_value=analytics_api):
             history = daily.history(5, cfg=self.cfg)
+        self.assertEqual([v["id"] for v in history["videos"]], ["v1"])  # old private upload skipped
         row = history["videos"][0]
         self.assertEqual((row["views"], row["seconds"], row["avg_view_percent"], row["shares"]), (10, 45, 87.5, 3))
         self.assertEqual((queries[0]["filters"], queries[0]["startDate"]), ("video==v1", "2026-11-04"))
