@@ -70,7 +70,7 @@ def _media_upload(path, mimetype, *, resumable=False):
 def request_body(publish: Publish, privacy="private", publish_at=None) -> dict:
     if privacy not in ("private", "unlisted", "public"):
         raise ValueError("privacy must be private, unlisted or public")
-    status = {"privacyStatus": privacy, "selfDeclaredMadeForKids": False,
+    status = {"privacyStatus": privacy, "selfDeclaredMadeForKids": False, "embeddable": True,
               "containsSyntheticMedia": publish.synthetic_media}
     if publish_at is not None:
         if privacy != "private":
@@ -190,7 +190,7 @@ def set_privacy(variant_dir, privacy: str) -> dict:
     record, result = _published(variant_dir)
     publish = load(variant_dir, "publish")
     _service().videos().update(part="status", body={"id": result["video_id"], "status": {
-        "privacyStatus": privacy, "selfDeclaredMadeForKids": False,
+        "privacyStatus": privacy, "selfDeclaredMadeForKids": False, "embeddable": True,
         "containsSyntheticMedia": bool(publish.synthetic_media)}}).execute()
     result["privacy"] = privacy
     result.setdefault("history", []).append({"privacy": privacy, "at": datetime.now(timezone.utc).isoformat()})

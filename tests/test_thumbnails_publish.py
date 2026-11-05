@@ -177,7 +177,7 @@ class YoutubeTests(unittest.TestCase):
         body = youtube.request_body(publish(), "public")
         self.assertEqual(body, {"snippet": {"title": "タイトル", "description": publish().description,
             "tags": ["解説", "科学", "動画"], "categoryId": "27", "defaultLanguage": "ja", "defaultAudioLanguage": "ja"},
-            "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False, "containsSyntheticMedia": True}})
+            "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False, "embeddable": True, "containsSyntheticMedia": True}})
         scheduled = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0).isoformat()
         self.assertIn("publishAt", youtube.request_body(publish(), "private", scheduled)["status"])
         self.assertFalse(youtube.request_body(publish(synthetic_media=False))["status"]["containsSyntheticMedia"])
