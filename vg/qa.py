@@ -323,6 +323,23 @@ def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
             check_disclosure(run_dir), check_metadata(run_dir), check_sfx_density(run_dir, style), check_yomi(run_dir)]
 
 
+# Checks the human may waive for a variant they chose (taste/tempo); safety and rights checks never.
+WAIVABLE = {"tempo", "speech_rate", "caption_coverage", "sfx_density", "mix", "silence", "duration"}
+
+
+def load_waivers(run_dir) -> dict[str, dict]:
+    """RUN[:vN]/qa_waivers.json: {"<check id>": {"reason": ..., "by": "user", "date": ...}} written only on
+    the user's explicit decision (e.g. 「このv2のままでよい」)."""
+    path = Path(run_dir) / "qa_waivers.json"
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    bad = sorted(set(data) - WAIVABLE)
+    if bad:
+        raise ValueError(f"qa_waivers.json: checks {bad} cannot be waived")
+    return data
+
+
 def write_report(run_dir, checks) -> QAReport:
     path = Path(run_dir) / "qa.json"
     previous = load(run_dir, "qa") if path.exists() else None
@@ -331,8 +348,13 @@ def write_report(run_dir, checks) -> QAReport:
     if previous and final.exists() and final.stat().st_mtime_ns > path.stat().st_mtime_ns:
         attempt += 1
     merged = {c.id: c for c in previous.checks} if previous else {}
+    waivers = load_waivers(run_dir)
     for check in checks:
         check = Check.model_validate(check)
+        if not check.passed and check.id in waivers:
+            w = waivers[check.id]
+            check = check.model_copy(update={"passed": True, "detail": f"WAIVED by {w.get('by', 'user')} "
+                                             f"({w.get('date', '?')}: {w.get('reason', '')}); {check.detail}"})
         merged[check.id] = check
     report = QAReport(attempt=attempt, checks=list(merged.values()))
     save(run_dir, "qa", report)
