@@ -27,5 +27,19 @@ class WaiverTests(unittest.TestCase):
                     qa.write_report(run, [Check(id=check_id, passed=False)])
 
 
+class HeadlessPublishGuardTests(unittest.TestCase):
+    def test_publish_refused_when_headless(self):
+        import os
+        from unittest import mock
+        from vg import cli
+        with mock.patch.dict(os.environ, {"VG_HEADLESS": "1"}):
+            self.assertEqual(cli.main(["publish", "youtube", "x:v1", "--confirm"]), 2)
+            self.assertEqual(cli.main(["publish", "youtube-privacy", "x:v1", "--privacy", "public", "--confirm"]), 2)
+
+    def test_run_request_marks_headless(self):
+        script = (Path(__file__).resolve().parents[1] / "scripts" / "run_request.sh").read_text()
+        self.assertIn("env VG_HEADLESS=1 claude -p", script)
+
+
 if __name__ == "__main__":
     unittest.main()

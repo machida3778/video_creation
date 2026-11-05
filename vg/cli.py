@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -259,6 +260,12 @@ def main(argv: list[str] | None = None) -> int:
     youtube.add_argument("--at")
     youtube.add_argument("--dry-run", action="store_true")
     youtube.add_argument("--force", action="store_true")
+    thumb = publish.add_parser("youtube-thumbnail")  # retry the cover of an uploaded variant
+    thumb.add_argument("run")
+    vis = publish.add_parser("youtube-privacy")  # e.g. private test upload -> public
+    vis.add_argument("run")
+    vis.add_argument("--privacy", choices=["private", "unlisted", "public"], required=True)
+    vis.add_argument("--confirm", action="store_true")
     analyze = sub.add_parser("analyze")
     analyze.add_argument("video")
     analyze.add_argument("--json", type=Path)
@@ -272,6 +279,10 @@ def main(argv: list[str] | None = None) -> int:
     a = p.parse_args(argv)
 
     if a.cmd == "publish":
+        if os.environ.get("VG_HEADLESS") == "1":
+            print("Publishing is refused in unattended runs (VG_HEADLESS=1): the user must choose and ask.",
+                  file=sys.stderr)
+            return 2
         from . import publish_youtube
         try:
             if a.publish_cmd == "auth":
@@ -281,6 +292,15 @@ def main(argv: list[str] | None = None) -> int:
             chosen = runs.resolve(a.run)
             if chosen.parent.name != "variants":
                 raise ValueError("publishing requires a human-chosen variant: RUN:vN")
+            if a.publish_cmd == "youtube-thumbnail":
+                print(json.dumps(publish_youtube.set_thumbnail(chosen), ensure_ascii=False, indent=2))
+                return 0
+            if a.publish_cmd == "youtube-privacy":
+                if not a.confirm:
+                    print(f"Changing visibility to {a.privacy} requires explicit --confirm", file=sys.stderr)
+                    return 1
+                print(json.dumps(publish_youtube.set_privacy(chosen, a.privacy), ensure_ascii=False, indent=2))
+                return 0
             if not a.confirm:
                 print(json.dumps(publish_youtube.preview(chosen, a.privacy, a.at, force=a.force),
                                  ensure_ascii=False, indent=2))

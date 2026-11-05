@@ -161,3 +161,38 @@ def _upload(variant_dir: Path, privacy: str, plan: dict):
             warnings.warn(f"YouTube {name}: {exc}", UserWarning, stacklevel=2)
         _save_json(record, result)
     return result
+
+
+def _published(variant_dir: Path) -> tuple[Path, dict]:
+    record = Path(variant_dir) / "published_youtube.json"
+    if not record.is_file():
+        raise ValueError(f"{variant_dir} has not been uploaded to YouTube yet")
+    return record, json.loads(record.read_text(encoding="utf-8"))
+
+
+def set_thumbnail(variant_dir) -> dict:
+    """Retry the custom thumbnail of an uploaded variant (e.g. after the channel's phone verification)."""
+    variant_dir = Path(variant_dir)
+    record, result = _published(variant_dir)
+    cover = _cover(variant_dir)
+    _service().thumbnails().set(videoId=result["video_id"], media_body=_media_upload(
+        cover, "image/png" if cover.suffix == ".png" else "image/jpeg")).execute()
+    result["thumbnail"] = "ok"
+    _save_json(record, result)
+    return result
+
+
+def set_privacy(variant_dir, privacy: str) -> dict:
+    """Change an uploaded variant's visibility (e.g. private test -> public), keeping its other status flags."""
+    if privacy not in ("private", "unlisted", "public"):
+        raise ValueError("privacy must be private, unlisted or public")
+    variant_dir = Path(variant_dir)
+    record, result = _published(variant_dir)
+    publish = load(variant_dir, "publish")
+    _service().videos().update(part="status", body={"id": result["video_id"], "status": {
+        "privacyStatus": privacy, "selfDeclaredMadeForKids": False,
+        "containsSyntheticMedia": bool(publish.synthetic_media)}}).execute()
+    result["privacy"] = privacy
+    result.setdefault("history", []).append({"privacy": privacy, "at": datetime.now(timezone.utc).isoformat()})
+    _save_json(record, result)
+    return result

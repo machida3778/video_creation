@@ -62,7 +62,8 @@ for tool in tools:
 PY
 )
 mapfile -t settings <<< "$settings_text"
-command=(timeout "${settings[0]}m" claude -p "/make-video $request"
+# VG_HEADLESS=1 marks an unattended run: vg refuses every publishing command in it.
+command=(timeout "${settings[0]}m" env VG_HEADLESS=1 claude -p "/make-video $request"
          --permission-mode acceptEdits --allowedTools "${settings[@]:2}" --output-format text)
 if [[ -n ${settings[1]} ]]; then command+=(--model "${settings[1]}"); fi
 
