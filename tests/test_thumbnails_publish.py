@@ -57,6 +57,17 @@ class CoverTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "collide"):
             Covers(options=[option(id="c"), option(id="c_120")])
 
+    def test_cover_only_image_from_a_prompt(self):
+        own = option(image="", prompt="one empty chair, close-up")
+        self.assertEqual(own.image, "img_cover_question")
+        self.assertEqual(option(image="img_cover_question", prompt="x").image, "img_cover_question")
+        for changes in (dict(image=""), dict(image="img_C1", prompt="x"), dict(image="", prompt=" ")):
+            with self.subTest(changes=changes), self.assertRaises(ValidationError):
+                option(**changes)
+        # Round trip: the saved JSON reloads unchanged.
+        again = CoverOption.model_validate_json(own.model_dump_json())
+        self.assertEqual((again.image, again.prompt), ("img_cover_question", "one empty chair, close-up"))
+
     def test_report_contrast_chars_lines_and_safe_region(self):
         for palette in thumbnail.PALETTES:
             report = thumbnail.option_report(option(palette=palette))

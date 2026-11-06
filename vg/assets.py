@@ -1,4 +1,5 @@
-"""Assets stage: storyboard visuals (visual.kind == "t2i") -> one GPU job on a free lab GPU -> assets/ + manifest.
+"""Assets stage: storyboard visuals (visual.kind == "t2i") and cover-only images (covers.json options with a
+`prompt`) -> one GPU job on a free lab GPU -> assets/ + manifest.
 
 GPU choice: the smallest idle lab card with enough memory (big cards stay free for others). The remote
 command always starts with scripts/lab/gpu_free.sh for that GPU (shared-GPU rule in AGENTS.md); if the
@@ -16,7 +17,7 @@ from pathlib import Path
 
 from .run import ROOT
 from . import registry, site
-from .schemas import Asset, BgmTrack, Manifest, Storyboard
+from .schemas import Asset, BgmTrack, Covers, Manifest, Storyboard
 from .variants import local_file
 from .sfx import asset_id, events
 
@@ -93,6 +94,33 @@ def t2i_jobs(board: Storyboard, run: Path | None = None, manifest: Manifest | No
     return jobs
 
 
+def cover_jobs(run: Path, manifest: Manifest | None = None, start_seed: int = 5000) -> list[dict]:
+    """Cover-only images: options in RUN/covers.json with a `prompt` and no generated file yet."""
+    path = Path(run) / "covers.json"
+    if not path.is_file():
+        return []
+    covers = Covers.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    existing = {a.id: a for a in manifest.assets} if manifest else {}
+    jobs = []
+    for index, option in enumerate(covers.options):
+        if option.prompt is None:
+            continue
+        asset = existing.get(option.cover_image_id)
+        params = {"prompt": option.prompt, "negative": option.negative or "",
+                  "seed": option.seed if option.seed is not None else start_seed + index}
+        if asset is not None and asset.kind == "image" \
+                and all(asset.params.get(key) == value for key, value in params.items()):
+            try:
+                local_file(run, asset.path)
+            except FileNotFoundError:
+                pass
+            else:
+                continue  # already generated from the same prompt and seed
+        jobs.append({"id": option.cover_image_id, **params, "width": T2I["width"], "height": T2I["height"],
+                     "scene": None, "realistic": option.photorealistic})
+    return jobs
+
+
 def _prepare(run: Path, board: Storyboard, manifest: Manifest | None = None, *,
              bgm_tracks: dict[str, BgmTrack] | None = None, library_root: Path | None = None) -> Manifest:
     """Resolve local assets before scheduling any GPU work."""
@@ -165,9 +193,17 @@ def generate_many(entries: list[tuple[Path, Storyboard, Manifest | None]], *,
     for directory, board, manifest in entries:
         run = Path(directory).resolve()
         manifest = _prepare(run, board, manifest, bgm_tracks=bgm_tracks, library_root=library_root)
-        jobs = t2i_jobs(board, run, manifest)
+        jobs = t2i_jobs(board, run, manifest) + cover_jobs(run, manifest)
         out = run / "assets" / "images"
         for job in jobs:
+            stale = out / f"{job['id']}.png"
+            if job["scene"] is None and stale.is_file():
+                # A cover redrawn with a new prompt or seed: the worker skips existing files, so keep the old
+                # image aside (assets/rejected/) instead of reusing it.
+                rejected = run / "assets" / "rejected" / f"{job['id']}-{time.strftime('%Y%m%d-%H%M%S')}.png"
+                rejected.parent.mkdir(parents=True, exist_ok=True)
+                stale.replace(rejected)
+                stale.with_suffix(".json").unlink(missing_ok=True)
             job["output"] = remote(out / f"{job['id']}.png")
         all_jobs.extend(jobs)
         prepared.append((run, board, manifest, jobs))

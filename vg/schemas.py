@@ -189,16 +189,33 @@ class CoverOption(BaseModel):
     text: str
     emphasis: list[str] = []
     badge: str | None = None
-    image: str = Field(min_length=1)
+    # A scene image from the manifest, or a cover-only image: give `prompt` (and optionally negative/seed)
+    # and `vg assets` generates it as img_cover_<id> (docs/THUMBNAILS.md 「表紙専用の画像」).
+    image: str = ""
+    prompt: str | None = None
+    negative: str | None = None
+    seed: int | None = None
     line_id: str = Field(min_length=1)
     palette: Literal["yellow", "red", "white"]
     ai_generated: bool
     photorealistic: bool
 
+    @property
+    def cover_image_id(self) -> str:
+        return f"img_cover_{self.id}"
+
     @model_validator(mode="after")
     def _headline(self):
         if self.id == "sheet":
             raise ValueError("cover id 'sheet' is reserved for the contact sheet")
+        if self.prompt is not None:
+            if not self.prompt.strip():
+                raise ValueError("cover prompt must not be empty")
+            if self.image and self.image != self.cover_image_id:
+                raise ValueError(f"a cover with its own prompt uses image {self.cover_image_id!r}")
+            self.image = self.cover_image_id
+        elif not self.image:
+            raise ValueError("cover needs an image (manifest id) or a prompt for a cover-only image")
         lines = self.text.split("\n")
         chars = visible_chars(self.text)
         if not 1 <= chars <= 20 or len(lines) > 3 or any(not line.strip() for line in lines):

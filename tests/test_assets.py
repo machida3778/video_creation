@@ -87,6 +87,40 @@ class BatchAssetsTests(unittest.TestCase):
             self.assertEqual(len(self.observed), 1)
             self.assertEqual(len(load(self.variants[1], "manifest").assets), 1)
 
+    def write_covers(self, variant, prompt):
+        covers = {"options": [
+            {"id": "own", "template": "reveal", "text": "3人に1人", "prompt": prompt, "line_id": "L1",
+             "palette": "yellow", "ai_generated": True, "photorealistic": False},
+            {"id": "scene", "template": "question", "text": "なぜ？", "image": "img_C1", "line_id": "L1",
+             "palette": "white", "ai_generated": True, "photorealistic": False}]}
+        (variant / "covers.json").write_text(json.dumps(covers, ensure_ascii=False), encoding="utf-8")
+
+    def test_cover_only_images_are_generated_with_the_scenes(self):
+        variant = self.variants[0]
+        self.write_covers(variant, "three chairs, one empty, close-up")
+        with patch.object(assets, "remote", side_effect=self.mapping), \
+                patch.object(assets, "_run_on_lab_gpu", side_effect=self.fake_worker) as worker:
+            cli.main(["assets", str(variant).replace(str(self.run) + "/variants/", str(self.run) + ":")])
+            self.assertEqual(worker.call_count, 1)
+            self.assertEqual(sorted(job["id"] for job in self.observed), ["img_C1", "img_cover_own"])
+            cover = next(job for job in self.observed if job["id"] == "img_cover_own")
+            self.assertEqual((cover["seed"], cover["width"], cover["height"]), (5000, 1088, 1920))
+            image = {a.id: a for a in load(variant, "manifest").assets}["img_cover_own"]
+            self.assertEqual((image.path, image.commercial_ok, image.params["prompt"]),
+                             ("assets/images/img_cover_own.png", True, "three chairs, one empty, close-up"))
+            self.assertEqual(load(variant, "covers").options[0].image, "img_cover_own")
+            # Unchanged prompt: nothing to draw again.
+            cli.main(["assets", str(self.run) + ":" + variant.name])
+            self.assertEqual(worker.call_count, 1)
+            # A new prompt redraws the cover and keeps the old image aside.
+            self.write_covers(variant, "a single empty office chair under a spotlight")
+            cli.main(["assets", str(self.run) + ":" + variant.name])
+            self.assertEqual(worker.call_count, 2)
+            self.assertEqual([job["id"] for job in self.observed], ["img_cover_own"])
+        self.assertEqual(len(list((variant / "assets/rejected").glob("img_cover_own-*.png"))), 1)
+        image = {a.id: a for a in load(variant, "manifest").assets}["img_cover_own"]
+        self.assertEqual(image.params["prompt"], "a single empty office chair under a spotlight")
+
     def test_plain_variant_cli_and_batch_failure_states(self):
         with patch.object(assets, "remote", side_effect=self.mapping), \
                 patch.object(assets, "_run_on_lab_gpu", side_effect=self.fake_worker):

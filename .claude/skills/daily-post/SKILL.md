@@ -30,7 +30,7 @@ Unattended: never ask questions. The user opted in to automatic uploads (2026-11
 ## 4. Self-review (nobody checks before the slot)
 - `vg sheet RUN:v1` and look at the contact sheet, `cover_small.jpg` and the timing/audio summary.
 - Every image must match its narration line: the right object and situation, no garbled letters or meaningless numbers, no realistic real person. Fix a mismatch by changing that scene's prompt or seed and rerunning from `assets` (then `vg make RUN:v1 --from timeline`).
-- Score the cover options with the rubric in `docs/THUMBNAILS.md` (「惹きつける見出し」) and make sure the strongest is chosen (`chosen_id` in `covers_report.json`, then `vg package RUN:v1`). A cover that states the answer, lacks the subject or shows the wrong part of the object is not acceptable: rewrite `covers.json` and rerun `vg thumbnail RUN:v1`.
+- Cover: follow `docs/THUMBNAILS.md` 「表紙専用の画像」 and 「採点と選び方」. At least two options use cover-only images (`prompt` in `covers.json`, drawn by `vg assets`). Do not score your own covers: start a fresh subagent (Agent tool) and give it only each option's `RUN/variants/v1/thumbs/<id>_180.jpg` and `<id>.jpg` paths, the video title and the `line_id` line; ask for strict 0–2 scores on the eight rubric items with one-line reasons. If the best total is under 12/16 or no option has 2 on ④ and ⑦, rewrite the headline or prompt/seed once, then `vg assets RUN:v1`, `vg thumbnail RUN:v1` and score again. Set `chosen_id` to the best option, record the judge's scores in `covers_report.json` `scores`, then `vg package RUN:v1`.
 - Re-read `publish.json`: the title and description must be accurate and match the video; sources and credits present.
 - If a problem cannot be fixed in two attempts, do not publish (step 6).
 

@@ -4,7 +4,7 @@
 
 ## 表紙の候補
 
-`docs/THUMBNAILS.md` に従い、`covers.json` に主張または構図の異なる3案を `Covers.options` として書く。各案に id・template（question / reveal / ranking）・text・emphasis・badge（rankingだけ）・image（manifestの画像ID）・line_id（約束を回収する台詞）・palette（yellow / red / white）・ai_generated・photorealistic を記録する。見出しは8〜12字、最大20字・3行。長い場合は文字を削る。見出しは `docs/THUMBNAILS.md` の「惹きつける見出し」の型で作り、答えを書かず、主語と意外性を入れる。採点の高い順に並べる（先頭が既定の表紙）。
+`docs/THUMBNAILS.md` に従い、`covers.json` に主張または構図の異なる3案を `Covers.options` として書く。各案に id・template（question / reveal / ranking）・text・emphasis・badge（rankingだけ）・image（manifestの画像ID）または prompt（表紙専用の画像。`vg assets` が `img_cover_<id>` として生成する）・line_id（約束を回収する台詞）・palette（yellow / red / white）・ai_generated・photorealistic を記録する。見出しは8〜12字、最大20字・3行。長い場合は文字を削る。見出しは `docs/THUMBNAILS.md` の「惹きつける見出し」の型で作り、答えを書かず、主語と意外性を入れる。3案のうち2案以上は表紙専用の画像にし、プロンプトは `docs/THUMBNAILS.md` の「表紙専用の画像」に従う（見出しの「おかしな点」を大きく写す寄りの構図、見出しの余白、画像に文字を入れない）。`covers.json` は `vg assets` より前に書く（表紙の画像も同じGPUジョブで作る）。並び順は仮でよく、最終の選択は独立した採点で決める。
 
 ## シーンの割り方
 
