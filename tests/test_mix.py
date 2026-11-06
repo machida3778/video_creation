@@ -109,9 +109,10 @@ class MixTests(unittest.TestCase):
         media.save(self.root, "timeline", self.timeline)
         with patch.object(mix, "measure_level", side_effect=[measured(-18), measured(-30), measured(-32, 0.08)]), \
                 patch.object(render, "run") as remotion, \
+                patch.object(render, "render_audio", return_value=self.root / "render/mix.wav"), \
                 patch.object(render, "loudnorm", return_value=self.root / "final.mp4"):
             self.assertEqual(render.render(self.root, concurrency=2), self.root / "final.mp4")
-        self.assertIn("--concurrency=2", remotion.call_args.args[0])
+        self.assertIn("--concurrency=2", remotion.call_args_list[0].args[0])
         props = json.loads((self.root / "render/props.json").read_text())["timeline"]
         saved = media.load(self.root, "timeline").model_dump(mode="json")
         self.assertEqual(props, saved)

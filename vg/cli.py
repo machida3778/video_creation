@@ -12,6 +12,7 @@
   vg bgm list | suggest RUN [--n 3]
   vg compare RUN
   vg thumbnail RUN[:vN]            render cover options and crop previews
+  vg en RUN[:vN] [--cpu]           English captions/dub; parent RUN batches all en.json variants
   vg publish auth youtube         authorize the optional official YouTube uploader
   vg publish youtube RUN:vN --confirm [--privacy private|unlisted|public] [--at ISO8601] [--dry-run]
   vg daily init | status [--check] | next | history [--limit N]   daily autopost (local/requests.md)
@@ -49,7 +50,11 @@ def cmd_validate(run: Path) -> int:
         path = run / ("assets/manifest.json" if name == "manifest" else f"{name}.json")
         if path.is_file():
             try:
-                media.load(run, name)
+                if name == "en":
+                    from .english import validate
+                    validate(run)
+                else:
+                    media.load(run, name)
                 print(f"ok   {name}")
             except Exception as exc:  # noqa: BLE001 - report every invalid file
                 bad += 1
@@ -270,6 +275,9 @@ def main(argv: list[str] | None = None) -> int:
     yomi = sub.add_parser("yomi", help="inspect VOICEVOX readings before QA")
     yomi.add_argument("run")
     yomi.add_argument("--approve", action="store_true", help="mark readings reviewed after fixing yomi and rerunning tts")
+    en = sub.add_parser("en", help="English localisation; parent RUN batches all variants with en.json")
+    en.add_argument("run")
+    en.add_argument("--cpu", action="store_true", help="run Kokoro on CPU on the selected lab GPU host")
     for name in ["validate", "cast", "status", "sheet", *PIPELINE]:
         parser = sub.add_parser(name)
         parser.add_argument("run")
@@ -420,6 +428,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{track.id}\t{track.title}\t{track.artist}\t{', '.join(track.mood)}\t{track.bpm}\t{track.length_sec}")
         return 0
     run = runs.resolve(a.run)
+    if a.cmd == "en":
+        from .english import generate_many
+        directories = ([run] if run.parent.name == "variants" else runs.variants(run) or [run])
+        directories = [d for d in directories if (d / "en.json").is_file()]
+        if not directories:
+            raise ValueError("write en.json before running vg en")
+        for directory in directories:
+            runs.mark(directory, "en", "running")
+        try:
+            generate_many(directories, cpu=a.cpu)
+        except Exception as exc:
+            for directory in directories:
+                runs.mark(directory, "en", "failed", str(exc))
+            raise
+        for directory in directories:
+            runs.mark(directory, "en", "done")
+        return 0
     if a.cmd == "thumbnail":
         from .thumbnail import thumbnail
         print(thumbnail(run))

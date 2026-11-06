@@ -311,6 +311,95 @@ def check_sfx_density(timeline, style=None) -> Check:
                  f"(max {style['sfx_max_per_10s']})")
 
 
+def check_english(run_dir) -> list[Check]:
+    from . import english
+    from .mix import measure_level
+    from .render import _timestamp
+
+    directory = Path(run_dir)
+    if not (directory / "en.json").is_file():
+        return [Check(id="english", passed=False, severity="warn", redo_stage="en",
+                      detail="en.json missing; English localisation is optional")]
+    checks = []
+    try:
+        spec = english.validate(directory)
+        duration = english.audio_duration(directory / "final.mp4")
+        ordered = english.ordered_timings(load(directory, "script"), load(directory, "timings"), duration)
+        checks.append(Check(id="en_schema", passed=True, redo_stage="en", detail="coverage and sources/credits valid"))
+    except (OSError, ValueError, KeyError, StopIteration, RuntimeError) as exc:
+        return [Check(id="en_schema", passed=False, redo_stage="en", detail=str(exc))]
+
+    def check(name, action):
+        try:
+            detail = action()
+            checks.append(Check(id=name, passed=True, redo_stage="en", detail=detail))
+        except (OSError, ValueError, KeyError, TypeError, StopIteration, RuntimeError) as exc:
+            checks.append(Check(id=name, passed=False, redo_stage="en", detail=str(exc)))
+
+    def subtitles():
+        cues = english.captions(spec, ordered)
+        expected = "".join(f"{i}\n{_timestamp(c.start)} --> {_timestamp(c.end)}\n{c.text}\n\n"
+                           for i, c in enumerate(cues, 1))
+        actual = (directory / "final_en.srt").read_text(encoding="utf-8")
+        if actual != expected:
+            raise ValueError("invalid/stale English SRT; must cover all lines at Japanese line times")
+        if any(not 0 <= c.start < c.end <= duration + 0.001 for c in cues):
+            raise ValueError("English SRT outside video duration")
+        return f"{len(cues)} cues; <=42 chars, <=2 rows, Japanese line times, within {duration:.3f}s"
+
+    def dub_duration():
+        path = directory / "dub_en.m4a"
+        actual = english.audio_duration(path)
+        audio = next(s for s in probe(path)["streams"] if s["codec_type"] == "audio")
+        if abs(actual-duration) > 0.05 or audio["codec_name"] != "aac" or str(audio["sample_rate"]) != "48000":
+            raise ValueError(f"English dub must be AAC 48 kHz and within 50 ms: {actual:.3f}s vs {duration:.3f}s")
+        return f"AAC 48 kHz; dub={actual:.3f}s, Japanese={duration:.3f}s"
+
+    def loudness():
+        ja = measure_level([directory / "final.mp4"])["integrated_lufs"]
+        en = measure_level([directory / "dub_en.m4a"])["integrated_lufs"]
+        if ja is None or en is None or abs(ja-en) > 1:
+            raise ValueError(f"English/Japanese loudness must differ by <=1 LU: en={en}, ja={ja}")
+        return f"en={en:.2f}, ja={ja:.2f} LUFS"
+
+    def speech():
+        fitted = load(directory / "en", "timings")
+        by_id = {t.line_id: t for t in fitted.lines}
+        if len(by_id) != len(fitted.lines) or set(by_id) != {t.line_id for t in ordered}:
+            raise ValueError("English fitted timings must cover every line exactly once")
+        texts = {line.id: line.text for line in spec.lines}
+        rates = []
+        for i, timing in enumerate(ordered):
+            fit = by_id[timing.line_id]
+            actual = english.audio_duration(directory / fit.audio)
+            end = ordered[i+1].start if i+1 < len(ordered) else duration
+            if (abs(fit.start-timing.start) > 0.001 or fit.end > end+0.001
+                    or abs(fit.end-fit.start-actual) > 0.001):
+                raise ValueError(f"{timing.line_id}: invalid English fitted timing/slot")
+            rate = english.word_rate(texts[timing.line_id], actual)
+            rates.append((timing.line_id, rate))
+        detail = "; ".join(f"{lid}: {rate:.3f} words/sec" for lid, rate in rates)
+        if any(rate > 3.3+1e-9 for _, rate in rates):
+            raise ValueError("shorten English line (>3.3 words/sec): " + detail)
+        checks.append(Check(id="en_speech_rate_warning", passed=all(rate <= 3.0 for _, rate in rates),
+                            severity="warn", redo_stage="en", detail=detail + " (warning above 3.0)"))
+        return detail + " (max 3.3)"
+
+    def fresh():
+        marker = json.loads((directory / "en/build.json").read_text())
+        voice = registry.load_voices()[marker["voice_id"]]
+        if marker["fingerprint"] != english.fingerprint(directory, voice):
+            raise ValueError("English outputs stale; rerun vg en after input changes")
+        return "English outputs match current inputs"
+
+    check("en_srt", subtitles)
+    check("en_dub_duration", dub_duration)
+    check("en_loudness", loudness)
+    check("en_speech_rate", speech)
+    check("en_fresh", fresh)
+    return checks
+
+
 def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
     info = probe(_final(run_dir))
     style = registry.load_style()
@@ -320,7 +409,8 @@ def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
             check_caption_timing(run_dir, _duration(info)), check_hook(metrics, style),
             check_tempo(run_dir, metrics, style), check_speech_rate(metrics, style),
             check_caption_coverage(metrics, style), check_originality(run_dir, runs_root=runs_root, style=style),
-            check_disclosure(run_dir), check_metadata(run_dir), check_sfx_density(run_dir, style), check_yomi(run_dir)]
+            check_disclosure(run_dir), check_metadata(run_dir), check_sfx_density(run_dir, style), check_yomi(run_dir),
+            *check_english(run_dir)]
 
 
 # Checks the human may waive for a variant they chose (taste/tempo); safety and rights checks never.
@@ -341,6 +431,7 @@ def load_waivers(run_dir) -> dict[str, dict]:
 
 
 def write_report(run_dir, checks) -> QAReport:
+    checks = list(checks)
     path = Path(run_dir) / "qa.json"
     previous = load(run_dir, "qa") if path.exists() else None
     attempt = previous.attempt if previous else 1
@@ -348,6 +439,8 @@ def write_report(run_dir, checks) -> QAReport:
     if previous and final.exists() and final.stat().st_mtime_ns > path.stat().st_mtime_ns:
         attempt += 1
     merged = {c.id: c for c in previous.checks} if previous else {}
+    if any(c.id in ("english", "en_schema") for c in checks):
+        merged = {key: value for key, value in merged.items() if key != "english" and not key.startswith("en_")}
     waivers = load_waivers(run_dir)
     for check in checks:
         check = Check.model_validate(check)

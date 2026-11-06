@@ -68,10 +68,13 @@ class MediaQATests(unittest.TestCase):
         self.assertEqual({c.id for c in checks}, {"format", "duration", "loudness", "black_frames",
                                                 "silence", "safe_area", "caption_timing", "hook", "tempo",
                                                 "speech_rate", "caption_coverage", "originality", "disclosure",
-                                                "sfx_density", "metadata", "yomi", "mix"})
+                                                "sfx_density", "metadata", "yomi", "mix", "english"})
         for check in checks:
             with self.subTest(check=check.id):
-                self.assertTrue(check.passed, check.detail)
+                if check.id == "english":
+                    self.assertEqual((check.passed, check.severity), (False, "warn"))
+                else:
+                    self.assertTrue(check.passed, check.detail)
                 self.assertNotIn("\n", check.detail)
 
     def test_black_gap_and_wrong_size(self):

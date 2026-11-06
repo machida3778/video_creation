@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 
 from .media import FFMPEG, ROOT, load, run, save, scrubbed_env
-from .mix import prepare_mix
+from .mix import prepare_mix, render_audio
 
 
 def _timestamp(seconds):
@@ -27,9 +27,9 @@ def write_srt(timeline, path):
     return path
 
 
-def loudnorm(src, dst):
+def loudnorm(src, dst, *, target_i=-14, audio_only=False):
     """Use measured loudnorm values in a second pass, preserving the video stream."""
-    target = "loudnorm=I=-14:TP=-1.5:LRA=11"
+    target = f"loudnorm=I={target_i}:TP=-1.5:LRA=11"
     first = run([str(FFMPEG), "-hide_banner", "-nostdin", "-i", str(src), "-vn",
                  "-af", target + ":print_format=json", "-f", "null", "-"])
     blocks = re.findall(r'\{\s*"input_i".*?\}', first.stderr, re.S)
@@ -42,8 +42,9 @@ def loudnorm(src, dst):
         raise ValueError("Cannot normalize audio with non-finite loudness measurements")
     settings = ":".join(f"{key}={measured[value]}" for key, value in fields.items())
     Path(dst).parent.mkdir(parents=True, exist_ok=True)
-    run([str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-i", str(src), "-map", "0:v:0",
-         "-map", "0:a:0", "-c:v", "copy", "-af", target + ":" + settings + ":linear=true",
+    video = [] if audio_only else ["-map", "0:v:0", "-c:v", "copy"]
+    run([str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-i", str(src), *video,
+         "-map", "0:a:0", "-af", target + ":" + settings + ":linear=true",
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(dst)])
     return Path(dst)
 
@@ -67,6 +68,10 @@ def render(run_dir, concurrency=None) -> Path:
     run(["npx", "remotion", "render", "src/index.ts", "Short", str(raw), f"--props={props}",
          f"--public-dir={run_dir}", "--codec=h264", "--audio-codec=aac", "--pixel-format=yuv420p",
          f"--concurrency={concurrency}", "--log=error"], cwd=ROOT / "render", env=env)
-    final = loudnorm(raw, run_dir / "final.mp4")
+    audio = render_audio(run_dir, timeline, render_dir / "mix.wav")
+    mixed = render_dir / "mixed.mp4"
+    run([str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-i", str(raw), "-i", str(audio),
+         "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "alac", str(mixed)])
+    final = loudnorm(mixed, run_dir / "final.mp4")
     write_srt(timeline, run_dir / "final.srt")
     return final

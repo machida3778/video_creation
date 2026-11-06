@@ -8,9 +8,63 @@ import re
 
 from .media import FFMPEG, probe, run
 from .registry import load_style
-from .schemas import Timeline
+from .schemas import AudioClip, Timeline
 
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|inf|nan)"
+
+
+def render_audio(run_dir, timeline: Timeline, destination, *, duration=None):
+    """Shared Japanese/English mixer: timeline gains, fades and voice-slot ducking.
+
+    Starts and envelopes follow the renderer's frame clock. No normalisation is
+    applied here; render.loudnorm performs the same final pass for both languages.
+    """
+    duration = timeline.duration if duration is None else duration
+    fps = timeline.fps
+    frame = lambda seconds: math.floor(seconds * fps + 0.5)
+    voices = [a for a in timeline.audio if a.kind == "voice"]
+    spans = [(frame(a.start) / fps, frame(voices[i+1].start if i+1 < len(voices) else a.start+6) / fps)
+             for i, a in enumerate(voices)]
+    cmd = [str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-filter_complex_threads", "1"]
+    filters, labels = [], []
+    audio_clips = list(timeline.audio)
+    for clip in timeline.clips:
+        if clip.component == "video_clip" and clip.props.get("muted") is False:
+            source = Path(run_dir) / clip.props["src"]
+            if any(s["codec_type"] == "audio" for s in probe(source)["streams"]):
+                audio_clips.append(AudioClip(start=clip.start, src=clip.props["src"], kind="sfx",
+                                             duration=clip.end-clip.start))
+    for i, audio in enumerate(audio_clips):
+        start = audio.start if audio.kind == "voice" else frame(audio.start) / fps
+        if start >= duration:
+            continue
+        cmd += ["-i", str(Path(run_dir) / audio.src)]
+        index = len(labels)
+        frames = max(1, min(frame(audio.duration or timeline.duration), frame(timeline.duration)-frame(audio.start)))
+        length = min(frames / fps, duration-start)
+        if audio.kind == "voice" and audio.duration is not None:
+            length = min(audio.duration, duration-start)
+        envelope = "1"
+        if audio.fade_in:
+            envelope = f"min({envelope},t/{audio.fade_in})"
+        if audio.fade_out:
+            envelope = f"min({envelope},max(0,({(frames-1)/fps}-t)/{audio.fade_out}))"
+        if audio.duck_under_voice and spans:
+            active = "+".join(f"gte(t+{start},{s})*lt(t+{start},{e})" for s, e in spans)
+            envelope += f"*if(gt({active},0),0.35,1)"
+        filters.append(f"[{index}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                       f"asetpts=N/SR/TB,atrim=end_sample={round(length*48000)},volume={audio.gain_db}dB,"
+                       f"volume='{envelope}':eval=frame,adelay={round(start*48000)}S:all=1[a{i}]")
+        labels.append(f"[a{i}]")
+    if not labels:
+        raise ValueError("timeline has no audio to mix")
+    samples = round(duration * 48000)
+    filters.append("".join(labels) + f"amix=inputs={len(labels)}:normalize=0:dropout_transition=0,"
+                   f"apad=whole_len={samples},atrim=end_sample={samples},asetpts=N/SR/TB[out]")
+    Path(destination).parent.mkdir(parents=True, exist_ok=True)
+    run(cmd + ["-filter_complex", ";".join(filters), "-map", "[out]", "-t", str(duration),
+               "-c:a", "pcm_s24le", str(destination)])
+    return Path(destination)
 
 
 def measure_level(paths: list[Path], gains_db: list[float] | None = None) -> dict:

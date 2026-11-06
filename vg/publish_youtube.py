@@ -130,7 +130,18 @@ def preview(variant_dir, privacy="private", publish_at=None, *, force=False) -> 
         raise ValueError("YouTube upload requires passed QA")
     publish = load(variant_dir, "publish")
     body = request_body(publish, privacy, publish_at)
-    return {"variant": str(variant_dir), "body": body,
+    english_files = {}
+    if (variant_dir / "en.json").is_file():
+        from .english import MANUAL_AUDIO, validate
+        from .qa import check_english
+        english = validate(variant_dir)
+        failed = [c for c in check_english(variant_dir) if not c.passed and c.severity == "block"]
+        if failed:
+            raise ValueError("YouTube upload requires passed English QA: " + "; ".join(c.detail for c in failed))
+        body["localizations"] = {"en": {"title": english.title, "description": english.description}}
+        english_files = {"captions_en": str(local_file(variant_dir, "final_en.srt")),
+                         "dub_en": str(local_file(variant_dir, "dub_en.m4a")), "dub_en_note": MANUAL_AUDIO}
+    return {"variant": str(variant_dir), "body": body, **english_files,
             "video": str(local_file(variant_dir, "final.mp4")), "cover": str(_cover(variant_dir)),
             "captions": str(local_file(variant_dir, "final.srt"))}
 
@@ -153,7 +164,12 @@ def upload(variant_dir, privacy="private", publish_at=None, dry_run=False, *, fo
 
 def _upload(variant_dir: Path, privacy: str, plan: dict):
     client = _service()
-    request = client.videos().insert(part="snippet,status", body=plan["body"],
+    # Quota (official docs checked 2026-11-06): videos.insert = 1 Video Uploads
+    # bucket unit; thumbnails.set ~=50 general units; captions.insert =400 each.
+    # JA: 1 upload +450 general; JA+EN: 1 upload +850 general. localizations
+    # rides the same insert. No audio upload API or Studio automation is used.
+    part = "snippet,status" + (",localizations" if "localizations" in plan["body"] else "")
+    request = client.videos().insert(part=part, body=plan["body"],
                                      media_body=_media_upload(plan["video"], "video/mp4", resumable=True))
     response = None
     while response is None:
@@ -162,10 +178,12 @@ def _upload(variant_dir: Path, privacy: str, plan: dict):
     result = {"video_id": video_id, "url": f"https://youtube.com/shorts/{video_id}",
               "privacy": privacy, "uploaded_at": datetime.now(timezone.utc).isoformat(),
               "thumbnail": "error: pending", "captions": "error: pending"}
+    if "captions_en" in plan:
+        result.update(captions_en="error: pending", dub_en=plan["dub_en"], dub_en_note=plan["dub_en_note"])
     record = variant_dir / "published_youtube.json"
     # Persist the ID immediately: optional follow-up failures must never cause a duplicate video.
     _save_json(record, result)
-    for name in ("thumbnail", "captions"):
+    for name in ("thumbnail", "captions", *(["captions_en"] if "captions_en" in plan else [])):
         try:
             if name == "thumbnail":
                 cover = Path(plan["cover"])
@@ -173,8 +191,9 @@ def _upload(variant_dir: Path, privacy: str, plan: dict):
                     cover, "image/png" if cover.suffix == ".png" else "image/jpeg")).execute()
             else:
                 client.captions().insert(part="snippet", body={"snippet": {
-                    "videoId": video_id, "language": "ja", "name": "日本語", "isDraft": False}},
-                    media_body=_media_upload(plan["captions"], "application/x-subrip")).execute()
+                    "videoId": video_id, "language": "en" if name == "captions_en" else "ja",
+                    "name": "English" if name == "captions_en" else "日本語", "isDraft": False}},
+                    media_body=_media_upload(plan[name], "application/x-subrip")).execute()
             result[name] = "ok"
         except Exception as exc:  # A custom-thumbnail-ineligible channel still has a successfully uploaded video.
             result[name] = f"error: {exc}"

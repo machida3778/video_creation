@@ -113,6 +113,31 @@ class FactCheckItem(BaseModel):
     comment: str = ""
 
 
+class EnglishLine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    text: str = Field(min_length=1, pattern=r"\S")
+
+
+class English(Spec):
+    title: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=5000)
+    lines: list[EnglishLine] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique(self):
+        ids = [line.id for line in self.lines]
+        if len(ids) != len(set(ids)):
+            raise ValueError("duplicate English line ids")
+        return self
+
+    def validate_script(self, script: Script):
+        expected, actual = {line.id for line in script.lines}, {line.id for line in self.lines}
+        if expected != actual:
+            raise ValueError(f"English coverage: missing={sorted(expected - actual)}, extras={sorted(actual - expected)}")
+        return self
+
+
 class FactCheck(Spec):
     checker: str                    # e.g. "claude-subagent", "codex"
     items: list[FactCheckItem]
@@ -456,6 +481,7 @@ class VoiceSpec(BaseModel):
     """config/voices.yaml entry: a concrete voice the request can name."""
     model_config = ConfigDict(extra="forbid")
     id: str
+    lang: Literal["ja", "en"] = "ja"
     engine: Literal["voicevox", "irodori", "qwen3_tts", "aivisspeech", "style_bert_vits2", "kokoro"]
     status: Literal["active", "pending"] = "active"   # pending = reference voice not made / not auditioned yet
     speaker: str | None = None      # VOICEVOX "キャラ名/スタイル名" (style id resolved from GET /speakers)
@@ -482,5 +508,5 @@ class VoiceSpec(BaseModel):
 STAGE_MODELS = {
     "brief": Brief, "route": Route, "research": Research, "script": Script, "factcheck": FactCheck,
     "timings": Timings, "storyboard": Storyboard, "manifest": Manifest, "timeline": Timeline,
-    "qa": QAReport, "publish": Publish, "covers": Covers,
+    "qa": QAReport, "publish": Publish, "covers": Covers, "en": English,
 }

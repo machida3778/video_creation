@@ -120,7 +120,7 @@ def record_voices(manifest: Manifest | None, script: Script, timings: Timings,
     voices = voices or load_voices()
     manifest = manifest or Manifest()
     speaker = {line.id: line.speaker for line in script.lines}
-    keep = [a for a in manifest.assets if a.kind != "voice"]
+    keep = [a for a in manifest.assets if a.kind != "voice" or a.params.get("lang") == "en"]
     for t in timings.lines:
         v = voices[script.cast[speaker[t.line_id]]]
         if script.voice_overrides.get(speaker[t.line_id]):

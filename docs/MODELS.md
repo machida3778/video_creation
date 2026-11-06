@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|
 | `tts` | VOICEVOX ENGINE 0.26.0（キャラクター） | — | エンジン LGPL-3.0。声はキャラクターごとの規約（`config/voices.yaml`） | CPU server | 候補 |
 | `tts` | Irodori-TTS v4.1 Small（ナレーター。文章で声を設計でき、声の複製も可） | Qwen3-TTS 1.7B（VoiceDesign → Base） | MIT / Apache-2.0 | lab GPU servers | 候補 |
+| `tts_en` | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M)（英語、af_heart / am_michael） | — | Apache-2.0 weights | lab GPU servers（GPU または CPU） | 実装済み・実機未検証 |
 | `t2i` | Qwen-Image-2512（日本語の文字の描画に対応と記載） | Z-Image Turbo（16GB、高速）、FLUX.2 Klein 4B（13GB） | Apache-2.0 | HPC cluster (NQSV) / lab GPU servers (48GB) | 候補 |
 | `image_edit` | Qwen-Image-Edit-2511（複数の参照画像でキャラクターを一貫させる） | FLUX.2 Klein 4B | Apache-2.0 | HPC cluster (NQSV) | 候補 |
 | `t2v` / `i2v` | Wan2.2 A14B ＋ LightX2V の4ステップ蒸留 LoRA | Wan2.2 TI2V-5B（24GB、量産向け） | Apache-2.0 | HPC cluster (NQSV)（H100 80GB） | 候補 |
@@ -53,5 +54,6 @@
 
 - Text-to-image: [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo), Apache-2.0; see `vg/assets.py` and `workers/t2i/`.
 - Speech: [VOICEVOX ENGINE](https://github.com/VOICEVOX/voicevox_engine), LGPL-3.0; individual voice terms and attribution URLs are recorded in `config/voices.yaml`.
+- English speech: [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), Apache-2.0 weights and `kokoro` package; Misaki English G2P. `espeak-ng` is GPL-3.0 and handles out-of-vocabulary words: the host executable when present, otherwise the library bundled in the `espeakng_loader` wheel (private use, not redistributed). See `workers/tts_kokoro/README.md`; inference verified on a lab GPU 2026-11-06.
 
 The candidate table is a planning inventory, not a list of validated backends. Check the exact weights and all dependent models before use.

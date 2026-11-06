@@ -94,7 +94,7 @@ def cast_for_type(spec: TypeSpec, voices: dict[str, VoiceSpec], defaults: dict[s
                                          for p in prefs]
         for voice_id in chain:
             voice = voices.get(voice_id) if voice_id else None
-            if voice and voice.status == "active" and not set(voice.restricted_content) & set(spec.content):
+            if voice and voice.lang == "ja" and voice.status == "active" and not set(voice.restricted_content) & set(spec.content):
                 cast[role] = voice_id
                 break
         else:
@@ -157,7 +157,7 @@ GENDER_WORDS = {"male": ("男性", "男の", "男声", "おじさん", "青年",
                 "female": ("女性", "女の", "女声", "お姉さん", "少女", "アナウンサー風の女性")}
 
 
-def resolve_voice(raw: str | None, voices: dict[str, VoiceSpec], role: str = "narrator") -> str | None:
+def resolve_voice(raw: str | None, voices: dict[str, VoiceSpec], role: str = "narrator", *, lang="ja") -> str | None:
     """Best voice id for the wording in a request, or None (then the type default applies).
 
     1. an alias or the display name appears in the text (longest match wins);
@@ -166,6 +166,7 @@ def resolve_voice(raw: str | None, voices: dict[str, VoiceSpec], role: str = "na
     """
     if not raw:
         return None
+    voices = {key: voice for key, voice in voices.items() if voice.lang == lang}
     # A voice named explicitly wins whatever its usual role (「ずんだもんで」 -> ずんだもん narrates).
     hits = [(len(alias), v.id) for v in voices.values() for alias in [v.name, *v.aliases] if alias and alias in raw]
     if hits:

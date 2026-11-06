@@ -99,6 +99,9 @@ def post_kit(destination: Path, publish: Publish) -> Path:
                     "4. 公開範囲と内容を人が確認して投稿します。\n")
     if publish.synthetic_media:
         instructions += "AI生成コンテンツを含みます。投稿先のAIラベル・合成メディア開示を有効にしてください。\n"
+    if (destination / "en.json").is_file():
+        from .english import MANUAL_AUDIO
+        instructions += f"English: ../en.json, ../final_en.srt, ../dub_en.m4a; {MANUAL_AUDIO}.\n"
     (kit / "README.txt").write_text(instructions, encoding="utf-8")
     return kit
 
@@ -107,7 +110,7 @@ def package(run_dir) -> Path:
     run_dir = Path(run_dir)
     if not (run_dir / "qa.json").is_file():
         raise ValueError("Packaging requires qa.json")
-    if any(not c.passed and c.severity == "block" and c.id != "metadata"
+    if any(not c.passed and c.severity == "block" and c.id != "metadata" and not c.id.startswith("en_")
            for c in load(run_dir, "qa").checks):
         raise ValueError("Packaging requires a passed QA report")
     # Check deliverables before writing metadata or creating an outbox directory.
@@ -140,7 +143,8 @@ def package(run_dir) -> Path:
                               c.ai_generated and c.photorealistic for c in load(run_dir, "covers").options)),
                       music_track=board.music.track if board and board.music else None)
     save(run_dir, "publish", publish)
-    report = write_report(run_dir, [check_metadata(run_dir)])
+    from .qa import check_english
+    report = write_report(run_dir, [check_metadata(run_dir), *check_english(run_dir)])
     if not report.passed:
         raise ValueError("Packaging requires passed metadata QA (see qa.json)")
     covers(run_dir)
@@ -149,6 +153,18 @@ def package(run_dir) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     for name in ("final.mp4", "final.srt", "publish.json", "cover.jpg", "cover_small.jpg"):
         shutil.copy2(run_dir / name, destination / name)
+    for name in ("en.json", "final_en.srt", "dub_en.m4a"):
+        if (run_dir / "en.json").is_file():
+            shutil.copy2(run_dir / name, destination / name)
+        else:
+            (destination / name).unlink(missing_ok=True)
+    english_readme = destination / "ENGLISH.txt"
+    if (run_dir / "en.json").is_file():
+        from .english import MANUAL_AUDIO
+        english_readme.write_text(f"Same Japanese video: English metadata in en.json; final_en.srt captions.\n"
+                                  f"dub_en.m4a: {MANUAL_AUDIO}.\n", encoding="utf-8")
+    else:
+        english_readme.unlink(missing_ok=True)
     (destination / "cover.png").unlink(missing_ok=True)
     if (run_dir / "covers.json").is_file():
         # Replace stale candidates when packaging the same variant again.
@@ -209,6 +225,11 @@ def compare(run: Path, *, outbox: Path | None = None) -> Path:
                         f"- BGM: {music}\n"
                         f"- シーン数: {len(board.scenes)}\n"
                         f"- QA: {'合格' if report.passed else '不合格'} — {checks}")
+        if (packaged / "en.json").is_file():
+            from .english import MANUAL_AUDIO
+            sections.append(f"English: [metadata]({variant.name}/en.json) / "
+                            f"[captions]({variant.name}/final_en.srt) / [dub]({variant.name}/dub_en.m4a). "
+                            f"Dub: {MANUAL_AUDIO}.")
         if (packaged / "covers.json").is_file():
             from .thumbnail import selected_cover
             chosen = selected_cover(packaged)

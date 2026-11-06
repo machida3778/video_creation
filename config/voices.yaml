@@ -6,10 +6,35 @@
 
 defaults:
   narrator: narrator_female       # main narrator, chosen by the user (2026-11-04)
+  narrator_en: kokoro_michael   # chosen by the user (2026-11-06)
   dialogue_a: vv_zundamon
   dialogue_b: vv_metan
 
 voices:
+  - id: kokoro_heart
+    engine: kokoro
+    lang: en
+    model: hexgrad/Kokoro-82M
+    speaker: af_heart
+    name: Heart (English)
+    gender: female
+    role: narrator
+    license: Apache-2.0
+    license_url: https://huggingface.co/hexgrad/Kokoro-82M
+    commercial_ok: true
+
+  - id: kokoro_michael
+    engine: kokoro
+    lang: en
+    model: hexgrad/Kokoro-82M
+    speaker: am_michael
+    name: Michael (English)
+    gender: male
+    role: narrator
+    license: Apache-2.0
+    license_url: https://huggingface.co/hexgrad/Kokoro-82M
+    commercial_ok: true
+
   # ---------------- VOICEVOX characters (engine 0.26.0, CPU server)
   - id: vv_suzumatsu
     engine: voicevox
