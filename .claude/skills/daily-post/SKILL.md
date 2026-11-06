@@ -42,4 +42,4 @@ Unattended: never ask questions. The user opted in to automatic uploads (2026-11
 On a temporary blocker (no idle GPU after waiting, QA or fact check keeps failing, missing tool, refused publish): `vg daily fail "<short Japanese reason>"` and stop. The item stays unchecked; the next cron attempt (hourly) resumes the same run for the next open slot. When the item itself is the problem (cannot be sourced, unsafe, unsupported), use `vg daily skip "<reason>"` instead; the next run moves to the following item.
 
 ## 7. Report
-Final message (goes to `local/logs/`): request (and whether it was added automatically), title, type, duration, voice, BGM, number of sources, QA warnings, URL and slot, or the failure reason.
+Final message (goes to `local/logs/`): request (and whether it was added automatically), title, type, duration, voice, BGM, number of sources, QA warnings, URL and slot, or the failure reason. End with the first line of `vg dubs` (how many uploads still wait for the manual English audio).

@@ -178,6 +178,8 @@ def _upload(variant_dir: Path, privacy: str, plan: dict):
     result = {"video_id": video_id, "url": f"https://youtube.com/shorts/{video_id}",
               "privacy": privacy, "uploaded_at": datetime.now(timezone.utc).isoformat(),
               "thumbnail": "error: pending", "captions": "error: pending"}
+    if plan["body"]["status"].get("publishAt"):
+        result["publish_at"] = plan["body"]["status"]["publishAt"]
     if "captions_en" in plan:
         result.update(captions_en="error: pending", dub_en=plan["dub_en"], dub_en_note=plan["dub_en_note"])
     record = variant_dir / "published_youtube.json"

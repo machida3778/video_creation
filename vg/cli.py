@@ -353,7 +353,16 @@ def main(argv: list[str] | None = None) -> int:
     daily.add_parser("history").add_argument("--limit", type=int, default=30)
     sub.add_parser("usage").add_argument("--check", action="store_true",
                                          help="exit 0 when usage allows a new video, 13 over the limit, 14 unknown")
+    dubs = sub.add_parser("dubs", help="uploads still waiting for the manual English audio track")
+    dubs.add_argument("--done", metavar="VIDEO_ID", help="record that the English audio was added in Studio")
     a = p.parse_args(argv)
+    if a.cmd == "dubs":
+        from . import dubs as dub_list
+        if a.done:
+            print(dub_list.mark_done(a.done))
+        else:
+            print(dub_list.report())
+        return 0
     if a.cmd == "daily":
         return cmd_daily(a)
     if a.cmd == "usage":
