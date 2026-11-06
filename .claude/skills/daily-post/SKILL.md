@@ -10,6 +10,7 @@ Unattended: never ask questions. The user opted in to automatic uploads (2026-11
 **Paths:** the argument of `/daily-post` is the repository path REPO (also this session's primary working directory). The Bash shell may start in another directory (the user's shell profile changes it), so run every command with absolute paths: `REPO/.venv/bin/vg ...` (written `vg` below), and read or write files as `REPO/...`. Relative paths such as `.venv/bin/vg` fail.
 
 ## 1. Is anything due?
+(`scripts/run_request.sh` already checked that Claude usage is at or under 70%; do not run `vg usage` here.)
 `vg daily status`. Stop with a one-line report if `enabled` is false, `scheduled` is true (no open slot left today) or `lead_ok` is false. `slot` is the slot this session fills; `slots` lists today's slots.
 
 ## 2. Pick the request

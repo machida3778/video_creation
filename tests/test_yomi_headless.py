@@ -177,6 +177,11 @@ class HeadlessTests(unittest.TestCase):
         for path in ["scripts/run_request.sh", "scripts/run_queue.sh", "config/headless.yaml"]:
             shutil.copyfile(ROOT / path, self.repo / path)
         (self.repo / ".venv/bin/python").symlink_to(sys.executable)
+        # Fake `vg usage --check`: records credential names it sees, exits TEST_USAGE_STATUS (default 0).
+        vg = self.repo / ".venv/bin/vg"
+        vg.write_text('#!/usr/bin/env bash\nprintf "%s|%s\\n" "$*" "$(compgen -e | grep -E \'API_KEY|API_TOKEN\' '
+                      '| tr "\\n" " ")" >> "$TEST_REPO/vg.calls"\nexit "${TEST_USAGE_STATUS:-0}"\n', encoding="utf-8")
+        vg.chmod(0o755)
         (self.repo / "scripts/site.sh").write_text(
             "export SITE_LOADED=1\nexport SITE_MODEL_API_KEY=site-fake-secret\n", encoding="utf-8")
         (self.repo / "scripts/setup/voicevox.sh").write_text(
@@ -293,6 +298,17 @@ sys.exit(7 if sys.argv[sys.argv.index("-p") + 1] == "/make-video fail" else 0)
                 result = self.run_script("run_request.sh", "test", RUN_REQUEST_DRY="1")
                 self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.calls())
+
+    def test_high_or_unknown_usage_starts_nothing(self):
+        for status in ("13", "14"):
+            with self.subTest(status=status):
+                result = self.run_script("run_request.sh", "test", TEST_USAGE_STATUS=status)
+                self.assertEqual(result.returncode, 75, result.stderr)
+                self.assertIn("not started", result.stdout)
+        self.assertFalse(self.calls())
+        self.assertFalse((self.repo / "voicevox.calls").exists())
+        calls = (self.repo / "vg.calls").read_text().splitlines()
+        self.assertEqual(calls, ["usage --check|", "usage --check|"])  # no credentials reach the probe
 
     def test_request_logs_starts_voicevox_and_reports_newest_readme(self):
         for name, modified in [("new", 2_000_000_000), ("old", 1_000_000_000)]:

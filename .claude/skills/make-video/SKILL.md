@@ -9,6 +9,8 @@ Headless runs start from `scripts/run_request.sh` and must never ask questions; 
 
 Prepare candidates without routine clarification. This skill never publishes: publishing happens only through `publish-video` (the user's choice) or `daily-post` (the scheduled daily upload, which runs this skill in daily mode). Every decision is recorded in the run directory; when something blocks (missing tool, no allowed voice, QA keeps failing), stop and report what is missing instead of asking. Rules from AGENTS.md apply (no API keys or paid APIs; open-weights models only; licences recorded).
 
+**Usage gate (user rule 2026-11-06):** start a new video only while Claude subscription usage is at or under `max_usage_percent` (70) in `config/headless.yaml`. Headless runs are checked by `scripts/run_request.sh` before they start. In an interactive session run `uv run vg usage --check` first; if it exits non-zero (over the limit or unknown), do not start: report its line and stop.
+
 Commands below run from the repo root: `uv run vg ...` (repo-relative paths). Schemas: `vg/schemas.py`. After writing any stage JSON run `vg validate <run>`.
 
 ## 1. Run and brief

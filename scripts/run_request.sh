@@ -97,6 +97,15 @@ if [[ ${RUN_REQUEST_DRY:-0} == 1 ]]; then
   exit 0
 fi
 
+# Start only while Claude subscription usage is at or under headless.max_usage_percent (vg/usage.py).
+# Over the limit or unknown: exit 75 without starting; the next cron or queue attempt checks again.
+usage_status=0
+env "${scrub[@]}" "$REPO/.venv/bin/vg" usage --check || usage_status=$?
+if [[ $usage_status -ne 0 ]]; then
+  echo "$(date -Is) not started: Claude usage over the limit or unknown (vg usage: $usage_status)"
+  exit 75
+fi
+
 mkdir -p local/logs
 stamp=$(date +%Y%m%d-%H%M%S)
 log="$REPO/local/logs/$stamp-$slug-$$.log"
