@@ -59,14 +59,20 @@ class CoverTests(unittest.TestCase):
 
     def test_cover_only_image_from_a_prompt(self):
         own = option(image="", prompt="one empty chair, close-up")
-        self.assertEqual(own.image, "img_cover_question")
-        self.assertEqual(option(image="img_cover_question", prompt="x").image, "img_cover_question")
+        self.assertEqual(own.image, "cover_question")
+        self.assertEqual(option(image="cover_question", prompt="x").image, "cover_question")
         for changes in (dict(image=""), dict(image="img_C1", prompt="x"), dict(image="", prompt=" ")):
             with self.subTest(changes=changes), self.assertRaises(ValidationError):
                 option(**changes)
         # Round trip: the saved JSON reloads unchanged.
         again = CoverOption.model_validate_json(own.model_dump_json())
-        self.assertEqual((again.image, again.prompt), ("img_cover_question", "one empty chair, close-up"))
+        self.assertEqual((again.image, again.prompt), ("cover_question", "one empty chair, close-up"))
+        # A report written before the optional prompt fields existed still matches the same option.
+        from vg import thumbnail
+        legacy = {k: v for k, v in option().model_dump().items() if k not in ("prompt", "negative", "seed")}
+        self.assertTrue(thumbnail._same(legacy, option()))
+        self.assertFalse(thumbnail._same(legacy, option(text="なぜ別？")))
+        self.assertFalse(thumbnail._same({"broken": True}, option()))
 
     def test_report_contrast_chars_lines_and_safe_region(self):
         for palette in thumbnail.PALETTES:

@@ -97,29 +97,58 @@ class BatchAssetsTests(unittest.TestCase):
 
     def test_cover_only_images_are_generated_with_the_scenes(self):
         variant = self.variants[0]
+        target = str(self.run) + ":" + variant.name
         self.write_covers(variant, "three chairs, one empty, close-up")
         with patch.object(assets, "remote", side_effect=self.mapping), \
                 patch.object(assets, "_run_on_lab_gpu", side_effect=self.fake_worker) as worker:
-            cli.main(["assets", str(variant).replace(str(self.run) + "/variants/", str(self.run) + ":")])
+            cli.main(["assets", target])
             self.assertEqual(worker.call_count, 1)
-            self.assertEqual(sorted(job["id"] for job in self.observed), ["img_C1", "img_cover_own"])
-            cover = next(job for job in self.observed if job["id"] == "img_cover_own")
-            self.assertEqual((cover["seed"], cover["width"], cover["height"]), (5000, 1088, 1920))
-            image = {a.id: a for a in load(variant, "manifest").assets}["img_cover_own"]
-            self.assertEqual((image.path, image.commercial_ok, image.params["prompt"]),
-                             ("assets/images/img_cover_own.png", True, "three chairs, one empty, close-up"))
-            self.assertEqual(load(variant, "covers").options[0].image, "img_cover_own")
-            # Unchanged prompt: nothing to draw again.
-            cli.main(["assets", str(self.run) + ":" + variant.name])
+            self.assertEqual(sorted(job["id"] for job in self.observed), ["cover_own", "img_C1"])
+            cover = next(job for job in self.observed if job["id"] == "cover_own")
+            self.assertEqual((cover["width"], cover["height"]), (1088, 1920))
+            first = {a.id: a for a in load(variant, "manifest").assets}["cover_own"]
+            self.assertRegex(first.path, r"^assets/images/cover_own-[0-9a-f]{10}\.png$")
+            self.assertEqual((first.commercial_ok, first.params["prompt"], first.params["seed"]),
+                             (True, "three chairs, one empty, close-up", cover["seed"]))
+            self.assertEqual(load(variant, "covers").options[0].image, "cover_own")
+            # Unchanged prompt: nothing to draw again; the seed does not depend on the option order.
+            covers = json.loads((variant / "covers.json").read_text(encoding="utf-8"))
+            covers["options"].reverse()
+            (variant / "covers.json").write_text(json.dumps(covers, ensure_ascii=False), encoding="utf-8")
+            cli.main(["assets", target])
             self.assertEqual(worker.call_count, 1)
-            # A new prompt redraws the cover and keeps the old image aside.
+            # A new prompt writes a new file; the earlier image stays on disk.
             self.write_covers(variant, "a single empty office chair under a spotlight")
-            cli.main(["assets", str(self.run) + ":" + variant.name])
+            cli.main(["assets", target])
             self.assertEqual(worker.call_count, 2)
-            self.assertEqual([job["id"] for job in self.observed], ["img_cover_own"])
-        self.assertEqual(len(list((variant / "assets/rejected").glob("img_cover_own-*.png"))), 1)
-        image = {a.id: a for a in load(variant, "manifest").assets}["img_cover_own"]
-        self.assertEqual(image.params["prompt"], "a single empty office chair under a spotlight")
+            self.assertEqual([job["id"] for job in self.observed], ["cover_own"])
+        second = {a.id: a for a in load(variant, "manifest").assets}["cover_own"]
+        self.assertNotEqual(second.path, first.path)
+        self.assertTrue((variant / first.path).is_file() and (variant / second.path).is_file())
+        self.assertEqual(second.params["prompt"], "a single empty office chair under a spotlight")
+
+    def test_interrupted_cover_job_resumes_without_redrawing(self):
+        variant = self.variants[0]
+        self.write_covers(variant, "three chairs, one empty, close-up")
+        def skipping_worker(command, min_mem):  # like workers/t2i/generate.py: existing files are not redrawn
+            args = shlex.split(command)
+            spec = Path(args[args.index("--spec") + 1].replace("/mapped", str(self.root), 1))
+            for job in json.loads(spec.read_text())["jobs"]:
+                out = Path(job["output"].replace("/mapped", str(self.root), 1))
+                if not out.is_file():
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    out.write_bytes(b"new drawing")
+
+        with patch.object(assets, "remote", side_effect=self.mapping), \
+                patch.object(assets, "_run_on_lab_gpu", side_effect=skipping_worker):
+            jobs = assets.cover_jobs(variant)
+            # The worker wrote the image, then the session died before the manifest was saved.
+            out = variant / "assets/images" / f"{jobs[0]['file']}.png"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(b"finished cover")
+            cli.main(["assets", str(self.run) + ":" + variant.name])
+        image = {a.id: a for a in load(variant, "manifest").assets}["cover_own"]
+        self.assertEqual((variant / image.path).read_bytes(), b"finished cover")
 
     def test_plain_variant_cli_and_batch_failure_states(self):
         with patch.object(assets, "remote", side_effect=self.mapping), \

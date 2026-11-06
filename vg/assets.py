@@ -8,11 +8,13 @@ Face cache in offline mode.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import shlex
 import shutil
 import subprocess
 import time
+import zlib
 from pathlib import Path
 
 from .run import ROOT
@@ -94,29 +96,31 @@ def t2i_jobs(board: Storyboard, run: Path | None = None, manifest: Manifest | No
     return jobs
 
 
-def cover_jobs(run: Path, manifest: Manifest | None = None, start_seed: int = 5000) -> list[dict]:
-    """Cover-only images: options in RUN/covers.json with a `prompt` and no generated file yet."""
+def cover_jobs(run: Path, manifest: Manifest | None = None) -> list[dict]:
+    """Cover-only images: options in RUN/covers.json with a `prompt` whose current image is not on disk yet.
+
+    The file name carries a fingerprint of prompt, negative, seed and size, so a changed prompt writes a new
+    file (older images stay where they are) and an interrupted run resumes without redrawing finished covers.
+    The default seed derives from the option id, so reordering the options never changes an image.
+    """
     path = Path(run) / "covers.json"
     if not path.is_file():
         return []
     covers = Covers.model_validate(json.loads(path.read_text(encoding="utf-8")))
     existing = {a.id: a for a in manifest.assets} if manifest else {}
     jobs = []
-    for index, option in enumerate(covers.options):
+    for option in covers.options:
         if option.prompt is None:
             continue
-        asset = existing.get(option.cover_image_id)
         params = {"prompt": option.prompt, "negative": option.negative or "",
-                  "seed": option.seed if option.seed is not None else start_seed + index}
-        if asset is not None and asset.kind == "image" \
-                and all(asset.params.get(key) == value for key, value in params.items()):
-            try:
-                local_file(run, asset.path)
-            except FileNotFoundError:
-                pass
-            else:
-                continue  # already generated from the same prompt and seed
-        jobs.append({"id": option.cover_image_id, **params, "width": T2I["width"], "height": T2I["height"],
+                  "seed": option.seed if option.seed is not None else 5000 + zlib.crc32(option.id.encode()) % 100000,
+                  "width": T2I["width"], "height": T2I["height"]}
+        digest = hashlib.sha256(json.dumps(params, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:10]
+        relative = f"assets/images/{option.cover_image_id}-{digest}.png"
+        asset = existing.get(option.cover_image_id)
+        if asset is not None and asset.kind == "image" and asset.path == relative and (Path(run) / relative).is_file():
+            continue
+        jobs.append({"id": option.cover_image_id, **params, "file": f"{option.cover_image_id}-{digest}",
                      "scene": None, "realistic": option.photorealistic})
     return jobs
 
@@ -195,16 +199,11 @@ def generate_many(entries: list[tuple[Path, Storyboard, Manifest | None]], *,
         manifest = _prepare(run, board, manifest, bgm_tracks=bgm_tracks, library_root=library_root)
         jobs = t2i_jobs(board, run, manifest) + cover_jobs(run, manifest)
         out = run / "assets" / "images"
+        ids = [job["id"] for job in jobs]
+        if len(set(ids)) != len(ids):
+            raise ValueError(f"{run}: duplicate image ids {sorted(i for i in set(ids) if ids.count(i) > 1)}")
         for job in jobs:
-            stale = out / f"{job['id']}.png"
-            if job["scene"] is None and stale.is_file():
-                # A cover redrawn with a new prompt or seed: the worker skips existing files, so keep the old
-                # image aside (assets/rejected/) instead of reusing it.
-                rejected = run / "assets" / "rejected" / f"{job['id']}-{time.strftime('%Y%m%d-%H%M%S')}.png"
-                rejected.parent.mkdir(parents=True, exist_ok=True)
-                stale.replace(rejected)
-                stale.with_suffix(".json").unlink(missing_ok=True)
-            job["output"] = remote(out / f"{job['id']}.png")
+            job["output"] = remote(out / f"{job.get('file', job['id'])}.png")
         all_jobs.extend(jobs)
         prepared.append((run, board, manifest, jobs))
     if all_jobs:
@@ -215,7 +214,7 @@ def generate_many(entries: list[tuple[Path, Storyboard, Manifest | None]], *,
                         T2I["min_mem_mb"])
     for run, board, manifest, jobs in prepared:
         for job in jobs:
-            path = run / "assets" / "images" / f"{job['id']}.png"
+            path = run / "assets" / "images" / f"{job.get('file', job['id'])}.png"
             if not path.is_file():
                 raise RuntimeError(f"t2i worker did not write {path}")
             manifest.assets = [a for a in manifest.assets if a.id != job["id"]]

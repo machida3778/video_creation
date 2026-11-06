@@ -69,13 +69,21 @@ def option_report(option: CoverOption, placement: dict | None = None) -> dict:
             "passed": all(checks.values())}
 
 
+def _same(stored, option) -> bool:
+    """A report's option equals the current one (reports written before newer optional fields still match)."""
+    try:
+        return CoverOption.model_validate(stored) == option
+    except (ValueError, TypeError):
+        return False
+
+
 def selected_cover(run_dir: Path) -> str:
     """Use the first passing candidate, unless a human recorded chosen_id in the report."""
     covers = load(run_dir, "covers")
     report = json.loads((run_dir / "covers_report.json").read_text(encoding="utf-8"))
     passing = {item["id"]: item for item in report["options"] if item.get("passed") is True}
     valid = [option.id for option in covers.options if option.id in passing
-             and passing[option.id].get("option") == option.model_dump() and option_report(option)["passed"]]
+             and _same(passing[option.id].get("option"), option) and option_report(option)["passed"]]
     chosen = report.get("chosen_id")
     if chosen is not None and chosen not in valid:
         raise ValueError("chosen cover did not pass thumbnail checks")

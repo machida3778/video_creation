@@ -190,7 +190,7 @@ class CoverOption(BaseModel):
     emphasis: list[str] = []
     badge: str | None = None
     # A scene image from the manifest, or a cover-only image: give `prompt` (and optionally negative/seed)
-    # and `vg assets` generates it as img_cover_<id> (docs/THUMBNAILS.md 「表紙専用の画像」).
+    # and `vg assets` generates it as cover_<id> (docs/THUMBNAILS.md 「表紙専用の画像」).
     image: str = ""
     prompt: str | None = None
     negative: str | None = None
@@ -202,7 +202,7 @@ class CoverOption(BaseModel):
 
     @property
     def cover_image_id(self) -> str:
-        return f"img_cover_{self.id}"
+        return f"cover_{self.id}"  # scene images are always img_<scene>, so the names never collide
 
     @model_validator(mode="after")
     def _headline(self):
