@@ -83,7 +83,7 @@ minutes=${settings[0]}
 if [[ -n $cap && $cap -lt $minutes ]]; then minutes=$cap; fi
 # VG_HEADLESS=1 marks an unattended run: vg refuses every publishing command in it. The daily
 # runner adds VG_AUTOPOST=1, which allows only `vg daily publish` (private upload scheduled for
-# today's slot) when local/preferences.yaml autopost.enabled is true.
+# its slot) when local/preferences.yaml autopost.enabled is true.
 marks=(VG_HEADLESS=1)
 if [[ $daily == 1 ]]; then marks+=(VG_AUTOPOST=1); fi
 command=(timeout --kill-after=60s "${minutes}m" env "${marks[@]}" claude -p "$prompt"

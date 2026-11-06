@@ -16,7 +16,7 @@
   vg publish youtube RUN:vN --confirm [--privacy private|unlisted|public] [--at ISO8601] [--dry-run]
   vg daily init | status [--check] | next | history [--limit N]   daily autopost (local/requests.md)
   vg daily add "<request>" --reason "..." | start "<request>" --run RUN | fail "<reason>" | skip "<reason>"
-  vg daily publish RUN:vN --confirm [--dry-run]   schedule for today's slot (private + publishAt)
+  vg daily publish RUN:vN --confirm [--dry-run]   schedule for the run's slot (private + publishAt)
   vg analyze VIDEO [--json PATH]    measure pixels/audio and write a six-frame contact sheet
   vg sfx build                     synthesize the original local sound-effect library
   vg feedback RUN "<text>" [--variant vN] | vg feedback RUN --show

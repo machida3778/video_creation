@@ -23,7 +23,7 @@ The harness turns a one-line request into vertical video candidates. An LLM agen
 | Rendering | `vg render` | `final.mp4`, `final.srt` |
 | Quality checks | `vg qa` and agent review | `qa.json`, contact sheet |
 | Packaging | `vg package` | Candidate files and `publish.json` in `outbox/` |
-| Final selection and publication decision | Human, or the opt-in daily autopost (`vg daily`) | Selected candidate, or one scheduled upload per day |
+| Final selection and publication decision | Human, or the opt-in daily autopost (`vg daily`) | Selected candidate, or scheduled uploads at the configured daily slots |
 
 Recipes in `types/<id>/type.yaml` define routing criteria, length limits, components, model capabilities, rights requirements and quality criteria. Planned recipes are not implemented backends. The initial implemented recipe is `trivia_explainer`.
 
@@ -45,7 +45,7 @@ A run shares its brief, route and research across independent `variants/vN/` dir
 
 ## Daily autopost (opt-in)
 
-`scripts/daily_post.sh` runs from cron. When `vg daily status --check` reports that today's slot still needs a video, it starts a headless Claude session with `/daily-post` (`VG_HEADLESS=1 VG_AUTOPOST=1`). The session takes the first unchecked item of the user's Markdown checklist (`autopost.list`, git-ignored), or adds one from the user's past items and the channel's statistics when the list is empty, and produces one variant with the normal stages and QA gates. `vg daily publish` is the only publishing command allowed in that session: it uploads privately with `publishAt` set to the day's slot (weekday and day-off times in `autopost`, Japanese holidays via `jpholiday`), then ticks the item and records the URL. Failures are noted under the item and the next attempt resumes the same run; a slot that cannot be met is skipped rather than posted late.
+`scripts/daily_post.sh` runs from cron. When `vg daily status --check` reports that one of today's slots still needs a video, it starts a headless Claude session with `/daily-post` (`VG_HEADLESS=1 VG_AUTOPOST=1`). The session takes the first unchecked item of the user's Markdown checklist (`autopost.list`, git-ignored), or adds one from the user's past items and the channel's statistics when the list is empty, and produces one variant with the normal stages and QA gates. `vg daily publish` is the only publishing command allowed in that session: it uploads privately with `publishAt` set to the slot the run was started for, then ticks the item and records the URL. `autopost.weekday` and `autopost.holiday` (Japanese holidays via `jpholiday`) hold one time or a list for several videos a day; each session fills the earliest open slot that still leaves `min_work_minutes`, and a slot within `min_gap_minutes` of a video already scheduled that day counts as filled. Cron runs the script hourly; state is kept per slot. Failures are noted under the item and the next attempt resumes the same run for the next open slot; a slot that cannot be met is skipped rather than posted late.
 
 ## Compute and site configuration
 

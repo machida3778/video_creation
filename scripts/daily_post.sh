@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Cron entry point for the daily autopost (vg/daily.py, .claude/skills/daily-post/SKILL.md).
-# Cheap when nothing is due: it exits before starting Claude unless today's slot still needs a video.
+# Cheap when nothing is due: it exits before starting Claude unless one of today's slots still needs a video.
+# Each run makes one video for the next open slot; cron calls it hourly so the following slots get theirs.
 set -euo pipefail
 REPO=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd -- "$REPO"
@@ -14,8 +15,8 @@ status=0
 case $status in
   0) ;;
   10) echo "$(date -Is) daily: autopost disabled"; exit 0 ;;
-  11) echo "$(date -Is) daily: today's video is already scheduled"; exit 0 ;;
-  12) echo "$(date -Is) daily: not enough time before today's slot"; exit 0 ;;
+  11) echo "$(date -Is) daily: no open slot left today"; exit 0 ;;
+  12) echo "$(date -Is) daily: not enough time before the next open slot"; exit 0 ;;
   *) echo "$(date -Is) daily: status check failed ($status)" >&2; exit "$status" ;;
 esac
 # Stop Claude in time: scheduling is refused later than min_lead_minutes before the slot.

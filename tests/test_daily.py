@@ -42,12 +42,93 @@ class DailyTest(unittest.TestCase):
         return self.root / "runs" / name, variant
 
     def test_slots_weekday_weekend_and_holidays(self):
-        hours = {d: daily.slot(d, self.cfg).hour for d in (
+        hours = {d: daily.slots(d, self.cfg)[0].hour for d in (
             date(2026, 11, 6), date(2026, 11, 7), date(2026, 11, 8),   # Friday, Saturday, Sunday
             date(2026, 11, 23), date(2026, 11, 24),                     # 勤労感謝の日 (Monday), Tuesday
             date(2026, 5, 6))}                                          # 振替休日
         self.assertEqual(list(hours.values()), [18, 10, 10, 10, 18, 10])
-        self.assertEqual(daily.slot(date(2026, 11, 6), self.cfg).utcoffset().total_seconds(), 9 * 3600)
+        self.assertEqual(daily.slots(date(2026, 11, 6), self.cfg)[0].utcoffset().total_seconds(), 9 * 3600)
+
+    def three(self):
+        return dict(self.cfg, weekday=["20:00", "07:30", "12:15"], holiday="09:00, 13:00,20:00")
+
+    def schedule(self, request, name, at, cfg):
+        run, variant = self.make_run(name)
+        daily.start(request, str(run), at=at, cfg=cfg, state_dir=self.state)
+        with patch("vg.publish_youtube.upload", return_value=dict(UPLOADED)) as upload:
+            daily.publish(variant, confirm=True, at=at, cfg=cfg, state_dir=self.state)
+        return upload.call_args.kwargs["publish_at"]
+
+    def test_three_slots_a_day_are_filled_in_order(self):
+        cfg = self.three()
+        self.assertEqual([f"{s:%H:%M}" for s in daily.slots(date(2026, 11, 7), cfg)], ["09:00", "13:00", "20:00"])
+        self.write_list("- [ ] 項目A", "- [ ] 項目B", "- [ ] 項目C", "- [ ] 項目D")
+        friday = [self.at(2026, 11, 6, 0, 30), self.at(2026, 11, 6, 1, 30), self.at(2026, 11, 6, 2, 30)]
+        made = []
+        for at, (request, name) in zip(friday, [("項目A", "r1"), ("項目B", "r2"), ("項目C", "r3")]):
+            self.assertEqual(daily.check(at, cfg, self.state), 0)
+            self.assertEqual(daily.status(at, cfg, self.state)["next"], request)
+            made.append(self.schedule(request, name, at, cfg))
+        self.assertEqual(made, ["2026-11-06T07:30:00+09:00", "2026-11-06T12:15:00+09:00",
+                                "2026-11-06T20:00:00+09:00"])
+        self.assertEqual(daily.check(self.at(2026, 11, 6, 3, 30), cfg, self.state), daily.SCHEDULED)
+        self.assertEqual(sorted(daily.load_state(self.state)["days"]),
+                         ["2026-11-06 07:30", "2026-11-06 12:15", "2026-11-06 20:00"])
+        self.assertEqual(daily.read_items(cfg)[1].notes, ["2026-11-06(金) 12:15 公開予約 https://youtube.com/shorts/abc"])
+        saturday = daily.status(self.at(2026, 11, 7, 0, 30), cfg, self.state)
+        self.assertEqual((saturday["slot"], saturday["next"]), ("2026-11-07T09:00:00+09:00", "項目D"))
+
+    def test_a_slot_too_close_to_make_a_video_is_passed_over(self):
+        cfg = self.three()
+        self.write_list("- [ ] 項目A")
+        info = daily.status(self.at(2026, 11, 6, 6, 55), cfg, self.state)  # 07:30 leaves 15 minutes of work
+        self.assertEqual((info["slot"], info["lead_ok"]), ("2026-11-06T12:15:00+09:00", True))
+        # A session started for 07:30 still publishes there, even after the next run would aim later.
+        run, variant = self.make_run()
+        daily.start("項目A", str(run), at=self.at(2026, 11, 6, 6, 0), cfg=cfg, state_dir=self.state)
+        with patch("vg.publish_youtube.upload", return_value=dict(UPLOADED)) as upload:
+            daily.publish(variant, confirm=True, at=self.at(2026, 11, 6, 6, 55), cfg=cfg, state_dir=self.state)
+        self.assertEqual(upload.call_args.kwargs["publish_at"], "2026-11-06T07:30:00+09:00")
+
+    def test_a_missed_slot_is_resumed_in_the_next_one(self):
+        cfg = self.three()
+        self.write_list("- [ ] 項目A")
+        run, variant = self.make_run()
+        daily.start("項目A", str(run), at=self.at(2026, 11, 6, 6, 0), cfg=cfg, state_dir=self.state)
+        # The session was stopped before 07:10; the next cron run moves on to 12:15.
+        self.assertEqual(daily.check(self.at(2026, 11, 6, 7, 20), cfg, self.state), 0)
+        days = daily.load_state(self.state)["days"]
+        self.assertEqual(days["2026-11-06 07:30"]["status"], "missed")
+        self.assertIn("11/06 07:30枠 間に合わず（次の機会に再挑戦）", daily.read_items(cfg)[0].notes)
+        info = daily.status(self.at(2026, 11, 6, 7, 20), cfg, self.state)
+        self.assertEqual((info["slot"], info["resume"], info["failures"]),
+                         ("2026-11-06T12:15:00+09:00", {"request": "項目A", "run": "runs/r1"}, 1))
+        daily.start("項目A", str(run), at=self.at(2026, 11, 6, 7, 20), cfg=cfg, state_dir=self.state)
+        with patch("vg.publish_youtube.upload", return_value=dict(UPLOADED)) as upload:
+            daily.publish(variant, confirm=True, at=self.at(2026, 11, 6, 7, 50), cfg=cfg, state_dir=self.state)
+        self.assertEqual(upload.call_args.kwargs["publish_at"], "2026-11-06T12:15:00+09:00")
+        # The upload repair attributes the run to its latest slot only.
+        daily.check(self.at(2026, 11, 6, 8, 20), cfg, self.state)
+        days = daily.load_state(self.state)["days"]
+        self.assertEqual((days["2026-11-06 07:30"]["status"], days["2026-11-06 12:15"]["status"]),
+                         ("missed", "scheduled"))
+
+    def test_old_day_keys_move_to_their_slot_and_block_close_slots(self):
+        cfg = self.three()
+        self.write_list("- [x] 昨日までの項目", "- [ ] 項目A")
+        self.state.mkdir()
+        (self.state / "state.json").write_text(json.dumps({"days": {"2026-11-06": {
+            "request": "昨日までの項目", "run": "runs/old", "status": "scheduled",
+            "slot": "2026-11-06T18:00:00+09:00", "url": "https://youtube.com/shorts/old"}}}), encoding="utf-8")
+        self.assertEqual(list(daily.load_state(self.state)["days"]), ["2026-11-06 18:00"])
+        at = self.at(2026, 11, 6, 10, 3)
+        info = daily.status(at, cfg, self.state)
+        # 07:30 has passed and 20:00 is within three hours of the 18:00 video already scheduled.
+        self.assertEqual([row["filled"] for row in info["slots"]], [False, False, True])
+        self.assertEqual(info["slot"], "2026-11-06T12:15:00+09:00")
+        self.assertEqual(self.schedule("項目A", "r1", at, cfg), "2026-11-06T12:15:00+09:00")
+        self.assertEqual(daily.check(self.at(2026, 11, 6, 11, 0), cfg, self.state), daily.SCHEDULED)
+        self.assertEqual(daily.check(self.at(2026, 11, 6, 11, 0), dict(cfg, min_gap_minutes=0), self.state), 0)
 
     def test_parse_items_notes_and_forgiving_markers(self):
         items = daily.parse("# h\n- 説明: `- [ ] 例`\n- [ ] 項目A\n  - 11/06 失敗: GPU\n* [X] 項目C\n\n- [] 項目B\n"
@@ -109,9 +190,10 @@ class DailyTest(unittest.TestCase):
         resume = daily.status(self.at(*saturday, 5, 0), self.cfg, self.state)["resume"]
         self.assertEqual(resume, {"request": "項目A", "run": "runs/r1"})
         self.assertEqual(daily.check(self.at(*saturday, 9, 30), self.cfg, self.state), daily.TOO_LATE)
-        self.assertEqual(daily.check(self.at(*saturday, 12, 0), self.cfg, self.state), daily.TOO_LATE)
-        self.assertEqual(daily.load_state(self.state)["days"]["2026-11-07"]["status"], "missed")
-        self.assertIn("11/07 間に合わず（次の機会に再挑戦）", daily.read_items(self.cfg)[0].notes)
+        # Once the slot has passed the day has no open slot left; the entry counts as missed.
+        self.assertEqual(daily.check(self.at(*saturday, 12, 0), self.cfg, self.state), daily.SCHEDULED)
+        self.assertEqual(daily.load_state(self.state)["days"]["2026-11-07 10:00"]["status"], "missed")
+        self.assertIn("11/07 10:00枠 間に合わず（次の機会に再挑戦）", daily.read_items(self.cfg)[0].notes)
         # The next day resumes the same run for the same unchecked request.
         self.assertEqual(daily.status(self.at(2026, 11, 8, 0, 30), self.cfg, self.state)["resume"],
                          {"request": "項目A", "run": "runs/r1"})
@@ -140,7 +222,7 @@ class DailyTest(unittest.TestCase):
         (variant / "published_youtube.json").write_text(
             '{"video_id": "abc", "url": "https://youtube.com/shorts/abc", "uploaded_at": "2026-11-05T16:05:00Z"}')
         self.assertEqual(daily.check(self.at(2026, 11, 6, 3, 0), self.cfg, self.state), daily.SCHEDULED)
-        self.assertEqual(daily.load_state(self.state)["days"]["2026-11-06"]["status"], "scheduled")
+        self.assertEqual(daily.load_state(self.state)["days"]["2026-11-06 18:00"]["status"], "scheduled")
         self.assertTrue(daily.read_items(self.cfg)[1].done)
         self.assertEqual(daily.read_items(self.cfg)[1].notes, ["2026-11-06(金) 18:00 公開予約 https://youtube.com/shorts/abc"])
 
@@ -199,7 +281,7 @@ class DailyTest(unittest.TestCase):
         info = daily.status(tomorrow, self.cfg, self.state)
         self.assertEqual((info["next"], info["resume"]), ("項目B", None))
         self.assertEqual(daily.check(tomorrow, self.cfg, self.state), 0)
-        self.assertEqual(daily.load_state(self.state)["days"]["2026-11-06"]["status"], "scheduled")
+        self.assertEqual(daily.load_state(self.state)["days"]["2026-11-06 18:00"]["status"], "scheduled")
         self.assertTrue(daily.read_items(self.cfg)[0].done)
 
     def interrupt_upload(self, variant, at):
@@ -251,7 +333,7 @@ class DailyTest(unittest.TestCase):
                 daily.publish(variant, confirm=True, at=saturday, cfg=self.cfg, state_dir=self.state)
         upload.assert_not_called()
         days = daily.load_state(self.state)["days"]
-        self.assertEqual((days["2026-11-06"]["status"], days["2026-11-07"]["status"]), ("scheduled", "superseded"))
+        self.assertEqual((days["2026-11-06 18:00"]["status"], days["2026-11-07 10:00"]["status"]), ("scheduled", "superseded"))
         item = daily.read_items(self.cfg)[0]
         self.assertEqual((item.done, item.notes[-1]), (True, "2026-11-06(金) 18:00 公開予約 https://youtube.com/shorts/abc"))
         info = daily.status(saturday, self.cfg, self.state)
