@@ -14,9 +14,9 @@ Do not replace the Japanese/PyTorch environments.
 ```sh
 hostname
 nvidia-smi
-bash /mnt/cgghome/machidai/video_creation/scripts/lab/gpu_free.sh 0
-uv sync --project /mnt/cgghome/machidai/video_creation/workers/tts_kokoro --python 3.12
-uv pip install --python /mnt/cgghome/machidai/video_creation/workers/tts_kokoro/.venv/bin/python 'https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl'
+bash $REPO/scripts/lab/gpu_free.sh 0
+uv sync --project $REPO/workers/tts_kokoro --python 3.12
+uv pip install --python $REPO/workers/tts_kokoro/.venv/bin/python 'https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl'
 command -v espeak-ng
 ```
 
@@ -26,7 +26,7 @@ used privately and not redistributed; synthesized audio is not covered by the
 GPL. On that same host, explicitly prepare the shared HF cache once (a model download, no inference):
 
 ```sh
-/mnt/cgghome/machidai/video_creation/workers/tts_kokoro/.venv/bin/python -c 'from huggingface_hub import snapshot_download; snapshot_download("hexgrad/Kokoro-82M", allow_patterns=["config.json", "kokoro-v1_0.pth", "voices/af_heart.pt", "voices/am_michael.pt", "LICENSE*"])'
+$REPO/workers/tts_kokoro/.venv/bin/python -c 'from huggingface_hub import snapshot_download; snapshot_download("hexgrad/Kokoro-82M", allow_patterns=["config.json", "kokoro-v1_0.pth", "voices/af_heart.pt", "voices/am_michael.pt", "LICENSE*"])'
 ```
 
 Inspect the downloaded LICENSE before production use. Setup commands assume the
@@ -40,11 +40,11 @@ the login server.
 Once the other agent has reviewed the worker and QA changes, on the file server:
 
 ```sh
-uv run --project /mnt/cgghome/machidai/video_creation vg en RUN:v1
-uv run --project /mnt/cgghome/machidai/video_creation vg en RUN
-uv run --project /mnt/cgghome/machidai/video_creation vg en RUN --cpu
-uv run --project /mnt/cgghome/machidai/video_creation vg qa RUN:v1
-uv run --project /mnt/cgghome/machidai/video_creation vg package RUN:v1
+uv run --project $REPO vg en RUN:v1
+uv run --project $REPO vg en RUN
+uv run --project $REPO vg en RUN --cpu
+uv run --project $REPO vg qa RUN:v1
+uv run --project $REPO vg package RUN:v1
 ```
 
 `RUN` batches all variants containing `en.json` in one worker invocation. Japanese
