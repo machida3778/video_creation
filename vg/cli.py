@@ -18,6 +18,7 @@
   vg daily init | status [--check] | next | history [--limit N]   daily autopost (local/requests.md)
   vg daily add "<request>" --reason "..." | start "<request>" --run RUN | fail "<reason>" | skip "<reason>"
   vg daily publish RUN:vN --confirm [--dry-run]   schedule for the run's slot (private + publishAt)
+  vg daily review [--due | --done "<summary>"]     once-a-day performance review data (local/insights.md)
   vg usage [--check]               Claude subscription usage; --check exits 0 at or under headless.max_usage_percent
   vg analyze VIDEO [--json PATH]    measure pixels/audio and write a six-frame contact sheet
   vg sfx build                     synthesize the original local sound-effect library
@@ -249,6 +250,15 @@ def cmd_daily(a) -> int:
             print(json.dumps({"skipped": daily.skip(a.reason, a.request)}, ensure_ascii=False))
         elif a.daily_cmd == "history":
             print(json.dumps(daily.history(a.limit), ensure_ascii=False, indent=2))
+        elif a.daily_cmd == "review":
+            from . import review
+            if a.done:
+                result = review.done(a.done)
+            elif a.due:
+                result = review.due()
+            else:
+                result = review.data(a.limit)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         elif a.daily_cmd == "publish":
             # Unattended runs may only schedule through the daily runner, never publish directly.
             if os.environ.get("VG_HEADLESS") == "1" and os.environ.get("VG_AUTOPOST") != "1":
@@ -352,6 +362,10 @@ def main(argv: list[str] | None = None) -> int:
     daily_publish.add_argument("--confirm", action="store_true")
     daily_publish.add_argument("--dry-run", action="store_true")
     daily.add_parser("history").add_argument("--limit", type=int, default=30)
+    daily_review = daily.add_parser("review", help="metrics joined with production choices, for the daily review")
+    daily_review.add_argument("--limit", type=int, default=50)
+    daily_review.add_argument("--due", action="store_true", help="only whether today's review is still due")
+    daily_review.add_argument("--done", metavar="SUMMARY", help="record that today's review was written")
     sub.add_parser("usage").add_argument("--check", action="store_true",
                                          help="exit 0 when usage allows a new video, 13 over the limit, 14 unknown")
     dubs = sub.add_parser("dubs", help="uploads still waiting for the manual English audio track")

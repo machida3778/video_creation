@@ -11,6 +11,8 @@ Prepare candidates without routine clarification. This skill never publishes: pu
 
 **Usage gate (user rule 2026-11-06):** start a new video only while Claude subscription usage is at or under `max_usage_percent` (70) in `config/headless.yaml`. Headless runs are checked by `scripts/run_request.sh` before they start. In an interactive session run `uv run vg usage --check` first; if it exits non-zero (over the limit or unknown), do not start: report its line and stop.
 
+**Lessons from analytics:** if `local/insights.md` exists (rewritten once a day by the daily review, `.claude/skills/daily-post/review.md`), read it before step 2 and apply its 制作ルール (type, hook, title, pacing, length, cover, BGM) as defaults wherever they fit the request; follow the current 実験 in daily mode. They never override the hard rules, QA gates, the fact check, title accuracy, `local/preferences.yaml` or what the user asked for. Mention in the report which rules were applied.
+
 Commands below run from the repo root: `uv run vg ...` (repo-relative paths). Schemas: `vg/schemas.py`. After writing any stage JSON run `vg validate <run>`.
 
 ## 1. Run and brief

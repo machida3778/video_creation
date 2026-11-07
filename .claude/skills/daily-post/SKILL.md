@@ -1,6 +1,6 @@
 ---
 name: daily-post
-description: Scheduled daily upload, run by scripts/daily_post.sh (cron) — take the next unchecked item of the user's request list (local/requests.md), or add one from past trends when the list is empty, make one YouTube Short and schedule it for today's next open slot (several a day; times in local/preferences.yaml autopost, weekdays vs weekends and Japanese holidays, JST). Use only when invoked as /daily-post.
+description: Scheduled daily upload, run by scripts/daily_post.sh (cron) — take the next unchecked item of the user's request list (local/requests.md), or add one from past trends when the list is empty, review the channel's analytics once a day into local/insights.md, make one YouTube Short and schedule it for today's next open slot (several a day; times in local/preferences.yaml autopost, weekdays vs weekends and Japanese holidays, JST). Use only when invoked as /daily-post.
 ---
 
 # daily-post
@@ -13,13 +13,17 @@ Unattended: never ask questions. The user opted in to automatic uploads (2026-11
 (`scripts/run_request.sh` already checked that Claude usage is at or under 70%; do not run `vg usage` here.)
 `vg daily status`. Stop with a one-line report if `enabled` is false, `scheduled` is true (no open slot left today) or `lead_ok` is false. `slot` is the slot this session fills; `slots` lists today's slots.
 
-## 2. Pick the request
+## 1b. Daily review (once a day, whether or not the list has items)
+`vg daily review --due`. If `due` is true, start a fresh general-purpose subagent (Agent tool) with only this prompt: 「REPO=<REPO>. Read REPO/.claude/skills/daily-post/review.md and follow it.」 It analyses which videos grew and which did not, rewrites `REPO/local/insights.md` and records the review. Do not do the analysis yourself (keep this session's context for the video). If the subagent fails or `vg daily review --due` is still true afterwards, note it for the report and continue: the next session retries. A review never blocks the video.
+
+Then read `REPO/local/insights.md` if it exists. Its 制作ルール and 実験 apply to this video (steps 2–4) as defaults; they never override the hard rules, QA, the fact check, `local/preferences.yaml` or the topic of a user's list item.
+
 - `vg daily next`. If `failures` is 2 or more, or the request cannot be made honestly with an implemented type (`trivia_explainer`, `ranking`, `dialogue_explainer`) or breaks the rules (news, medical/financial advice, real private persons), run `vg daily skip "<short Japanese reason>" --request "<request>"` and call `vg daily next` again.
 - If it returns `run`, resume that run for the same request: `vg daily start "<request>" --run <run>`, then `vg status <run>` / `vg status <run>:v1` and continue from the first unfinished or failed stage (skip step 3.1).
-- If it returns a `request` without `run`, use it verbatim (`vg daily start` refuses text that is not an unchecked list item).
+- If it returns a `request` without `run`, use it verbatim (`vg daily start` refuses text that is not an unchecked list item). The topic is the user's; insights may shape the type, hook, title and cover, not the subject.
 - If it returns `{"empty": true}`, add one item yourself:
   1. `vg daily history` — the user's past list items (their interests and phrasing) and the channel's uploads with views, likes, views per day and, when the analytics permission is granted, average percentage viewed, average view seconds, shares and subscribers gained (analytics lag about two days; `analytics_error` means only views and likes are available). Weigh retention (average percentage viewed) and shares above raw views: they show which questions held attention.
-  2. Choose one new request that fits the channel concept in `REPO/local/preferences.yaml` (`channel`) and follows what worked: the subject areas, video types and question styles of the better-performing videos and of the user's own items. With little data (fewer than five videos with views), stay close to the user's items.
+  2. Choose one new request that fits the channel concept in `REPO/local/preferences.yaml` (`channel`) and follows what worked (`REPO/local/insights.md` リクエストの選び方 first, then the data): the subject areas, video types and question styles of the better-performing videos and of the user's own items. With little data (fewer than five videos with views), stay close to the user's items.
   3. It must be a new question: not a topic or angle already produced (titles in `outbox/*/publish.json`, `outbox/*/*/publish.json`, `runs/*/script.json` and `runs/*/variants/*/script.json`). Low risk only: no news or current events, no medical, health, legal or financial advice, no real private persons, nothing needing realistic depictions of real people.
   4. Write it like the user's items (one Japanese line), then `vg daily add "<request>" --reason "<which trend it follows, one line>"` and use it.
 
@@ -42,4 +46,4 @@ Unattended: never ask questions. The user opted in to automatic uploads (2026-11
 On a temporary blocker (no idle GPU after waiting, QA or fact check keeps failing, missing tool, refused publish): `vg daily fail "<short Japanese reason>"` and stop. The item stays unchecked; the next cron attempt (hourly) resumes the same run for the next open slot. When the item itself is the problem (cannot be sourced, unsafe, unsupported), use `vg daily skip "<reason>"` instead; the next run moves to the following item.
 
 ## 7. Report
-Final message (goes to `local/logs/`): request (and whether it was added automatically), title, type, duration, voice, BGM, number of sources, QA warnings, URL and slot, or the failure reason. End with the first line of `vg dubs` (how many uploads still wait for the manual English audio).
+Final message (goes to `local/logs/`): whether today's review ran (its one-line finding, or why it failed), which insights rules or experiment this video applied, request (and whether it was added automatically), title, type, duration, voice, BGM, number of sources, QA warnings, URL and slot, or the failure reason. End with the first line of `vg dubs` (how many uploads still wait for the manual English audio).
