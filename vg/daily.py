@@ -25,6 +25,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import warnings
 from zoneinfo import ZoneInfo
 
 from .media import ROOT
@@ -531,7 +532,7 @@ def publish(run_dir: Path, *, confirm: bool, dry_run: bool = False, at: datetime
             _atomic_write(journal_path, json.dumps({"at": datetime.now(timezone.utc).isoformat(), "slot": plan_at,
                                                     "title": load(run_dir, "publish").title},
                                                    ensure_ascii=False) + "\n")
-            result = publish_youtube.upload(run_dir, privacy="private", publish_at=plan_at)
+            result = publish_youtube.upload(run_dir, privacy="private", publish_at=plan_at, cover=False)
         journal_path.unlink(missing_ok=True)
         variant = str(run_dir.relative_to(ROOT)) if run_dir.is_relative_to(ROOT) else str(run_dir)
         done = dict(status="scheduled", video_id=result["video_id"], url=result["url"], variant=variant,
@@ -550,6 +551,14 @@ def publish(run_dir: Path, *, confirm: bool, dry_run: bool = False, at: datetime
     if earlier:
         raise ValueError(f"this request was already uploaded for {when} (recovered after an interrupted upload); "
                          "this slot is still open: take the next item with `vg daily next`")
+    # The cover waits for YouTube's processing (minutes), so it comes after the slot and the list are
+    # recorded: a session killed meanwhile loses only the cover, which the hourly cron sets again.
+    try:
+        result["thumbnail"] = publish_youtube.set_thumbnail(run_dir)["thumbnail"]
+    except Exception as exc:
+        result["thumbnail"] = f"error: {exc}"
+        warnings.warn(f"YouTube thumbnail: {exc}; scripts/daily_post.sh sets it again within the hour",
+                      UserWarning, stacklevel=2)
     return result | {"publish_at": plan_at}
 
 

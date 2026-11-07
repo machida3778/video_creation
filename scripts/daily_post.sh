@@ -10,6 +10,9 @@ mkdir -p local/daily local/logs
 # One daily run at a time; the lock is held (and inherited) until this script exits.
 exec 9>>local/daily/run.lock
 if ! flock -n 9; then echo "$(date -Is) daily: another run is active"; exit 0; fi
+# Covers YouTube kept without a vertical (Shorts) version are set again; failures never block the run.
+repaired=$(.venv/bin/vg publish youtube-thumbnails) || echo "$(date -Is) daily: thumbnail repair failed" >&2
+[[ -z $repaired || $repaired == "[]" ]] || echo "$(date -Is) daily: covers set again: $repaired"
 status=0
 .venv/bin/vg daily status --check >/dev/null || status=$?
 case $status in

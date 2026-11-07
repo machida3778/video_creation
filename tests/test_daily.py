@@ -6,6 +6,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import warnings
 
 from vg import cli, daily
 from vg.media import save
@@ -25,6 +26,10 @@ class DailyTest(unittest.TestCase):
         patcher = patch.object(daily, "ROOT", self.root)
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The cover step after scheduling must never reach YouTube from a test.
+        cover = patch("vg.publish_youtube.set_thumbnail", return_value={"thumbnail": "ok"})
+        self.set_thumbnail = cover.start()
+        self.addCleanup(cover.stop)
 
     def at(self, *args):
         return datetime(*args, tzinfo=JST)
@@ -147,7 +152,9 @@ class DailyTest(unittest.TestCase):
         with patch("vg.publish_youtube.upload", return_value=dict(UPLOADED)) as upload:
             result = daily.publish(variant, confirm=True, at=self.at(2026, 11, 6, 1, 10), cfg=self.cfg,
                                    state_dir=self.state)
-        upload.assert_called_once_with(variant, privacy="private", publish_at="2026-11-06T18:00:00+09:00")
+        upload.assert_called_once_with(variant, privacy="private", publish_at="2026-11-06T18:00:00+09:00", cover=False)
+        self.set_thumbnail.assert_called_once_with(variant.resolve())
+        self.assertEqual(result["thumbnail"], "ok")
         self.assertEqual(result["publish_at"], "2026-11-06T18:00:00+09:00")
         items = daily.read_items(self.cfg)
         self.assertTrue(items[0].done)
@@ -158,6 +165,27 @@ class DailyTest(unittest.TestCase):
             daily.publish(variant, confirm=True, at=self.at(2026, 11, 6, 5, 0), cfg=self.cfg, state_dir=self.state)
         tomorrow = daily.status(self.at(2026, 11, 7, 0, 30), self.cfg, self.state)
         self.assertEqual((tomorrow["next"], tomorrow["slot"]), ("項目B", "2026-11-07T10:00:00+09:00"))
+
+    def test_cover_is_set_after_the_slot_and_list_are_recorded(self):
+        self.write_list("- [ ] 項目A")
+        run, variant = self.make_run()
+        daily.start("項目A", str(run), at=self.at(2026, 11, 6, 0, 31), cfg=self.cfg, state_dir=self.state)
+        seen = []
+
+        def cover(run_dir):  # e.g. the session is out of time while YouTube is still processing
+            seen.append(([e.get("status") for e in daily.load_state(self.state)["days"].values()],
+                         [i.done for i in daily.read_items(self.cfg)]))
+            raise RuntimeError("video still processing")
+        self.set_thumbnail.side_effect = cover
+        with patch("vg.publish_youtube.upload", return_value=dict(UPLOADED)), \
+                warnings.catch_warnings(record=True) as notices:
+            warnings.simplefilter("always")
+            result = daily.publish(variant, confirm=True, at=self.at(2026, 11, 6, 1, 10), cfg=self.cfg,
+                                   state_dir=self.state)
+        self.assertEqual(seen, [(["scheduled"], [True])])
+        self.assertIn("still processing", result["thumbnail"])
+        self.assertEqual(result["video_id"], "abc")
+        self.assertEqual(len(notices), 1)
 
     def test_publish_refusals(self):
         self.write_list("- [ ] 項目A")

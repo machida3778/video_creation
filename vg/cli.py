@@ -317,6 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     youtube.add_argument("--force", action="store_true")
     thumb = publish.add_parser("youtube-thumbnail")  # retry the cover of an uploaded variant
     thumb.add_argument("run")
+    publish.add_parser("youtube-thumbnails")  # re-set covers YouTube kept without a vertical version
     vis = publish.add_parser("youtube-privacy")  # e.g. private test upload -> public
     vis.add_argument("run")
     vis.add_argument("--privacy", choices=["private", "unlisted", "public"], required=True)
@@ -381,6 +382,9 @@ def main(argv: list[str] | None = None) -> int:
             if a.publish_cmd == "auth":
                 publish_youtube.authorize()
                 print("YouTube OAuth authorized")
+                return 0
+            if a.publish_cmd == "youtube-thumbnails":
+                print(json.dumps(publish_youtube.repair_thumbnails(), ensure_ascii=False, indent=2))
                 return 0
             chosen = runs.resolve(a.run)
             if chosen.parent.name != "variants":

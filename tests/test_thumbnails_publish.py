@@ -189,6 +189,8 @@ class YoutubeTests(unittest.TestCase):
             (self.variant / name).write_bytes(b"synthetic")
         self.client = Mock()
         self.client.videos().insert().next_chunk.side_effect = [(None, None), (None, {"id": "test123"})]
+        self.client.videos().list().execute.return_value = {"items": [{"id": "test123", "processingDetails": {
+            "processingStatus": "succeeded"}, "snippet": {"thumbnails": {"shortsAspectRatio": {}}}}]}
 
     def test_request_body_and_schedule_rules(self):
         body = youtube.request_body(publish(), "public")
@@ -238,6 +240,76 @@ class YoutubeTests(unittest.TestCase):
         self.assertEqual(result["video_id"], "test123")
         self.assertTrue((self.variant / "published_youtube.json").exists())
         self.assertTrue(youtube._cover(self.variant).name.endswith("jpg"))
+
+    def test_cover_waits_for_processing_and_needs_vertical_version(self):
+        def item(status, *keys):
+            return {"items": [{"processingDetails": {"processingStatus": status},
+                               "snippet": {"thumbnails": {key: {} for key in keys}}}]}
+        client, sleeps = Mock(), []
+        client.videos().list().execute.side_effect = [item("processing"), item("succeeded"),
+                                                      item("succeeded", "maxres"), item("succeeded", "maxres", "shortsAspectRatio")]
+        with patch.object(youtube, "_media_upload", return_value="media"):
+            youtube._set_cover(client, "test123", Path("cover.png"), sleep=sleeps.append)
+            self.assertEqual(client.thumbnails().set().execute.call_count, 1)
+            self.assertEqual(len(sleeps), 2)
+            client.videos().list().execute.side_effect = None
+            client.videos().list().execute.return_value = item("succeeded", "maxres", "uhd")
+            with self.assertRaisesRegex(RuntimeError, "vertical"):
+                youtube._set_cover(client, "test123", Path("cover.png"), sleep=lambda _: None)
+            self.assertEqual(client.thumbnails().set().execute.call_count, 3)
+            client.videos().list().execute.return_value = item("processing")
+            with self.assertRaisesRegex(RuntimeError, "still processing"), patch.object(youtube, "PROCESSING_TIMEOUT_SEC", 0):
+                youtube._set_cover(client, "test123", Path("cover.png"), sleep=lambda _: None)
+            self.assertFalse(youtube._processed(client, "test123", timeout=0, sleep=lambda _: None))
+
+    def test_repair_resets_only_processed_covers_without_vertical_version(self):
+        (self.variant / "published_youtube.json").write_text(json.dumps({"video_id": "test123", "thumbnail": "ok"}))
+        other = self.root / "runs/b/variants/v1"
+        other.mkdir(parents=True)
+        (other / "published_youtube.json").write_text(json.dumps({"video_id": "fine456"}))
+        runs_dir = self.root / "runs"
+        (runs_dir / "a/variants").mkdir(parents=True)
+        self.variant.rename(runs_dir / "a/variants/v2")
+        self.client.videos().list().execute.return_value = {"items": [
+            {"id": "test123", "processingDetails": {"processingStatus": "succeeded"}, "snippet": {"thumbnails": {"uhd": {}}}},
+            {"id": "fine456", "processingDetails": {"processingStatus": "succeeded"},
+             "snippet": {"thumbnails": {"shortsAspectRatio": {}}}}]}
+        with patch.object(youtube, "_service", return_value=self.client), \
+                patch.object(youtube, "set_thumbnail", return_value={"thumbnail": "ok"}) as reset:
+            repaired = youtube.repair_thumbnails(runs_dir)
+        reset.assert_called_once_with(runs_dir / "a/variants/v2")
+        self.assertEqual([r["video_id"] for r in repaired], ["test123"])
+
+    def test_captions_before_cover_and_deferred_cover(self):
+        order = []
+        self.client.captions().insert().execute.side_effect = lambda: order.append("captions")
+        self.client.thumbnails().set().execute.side_effect = lambda: order.append("thumbnail")
+        with patch.object(youtube, "_service", return_value=self.client), \
+                patch.object(youtube, "_media_upload", return_value="media"):
+            youtube.upload(self.variant)
+            self.assertEqual(order, ["captions", "thumbnail"])
+            order.clear()
+            self.client.videos().insert().next_chunk.side_effect = [(None, {"id": "test456"})]
+            result = youtube.upload(self.variant, force=True, cover=False)
+        self.assertEqual(order, ["captions"])
+        self.assertEqual(result["thumbnail"], "pending")
+
+    def test_repair_gives_up_after_repeated_failures(self):
+        runs_dir = self.root / "runs"
+        (runs_dir / "a/variants").mkdir(parents=True)
+        variant = self.variant.rename(runs_dir / "a/variants/v2")
+        record = variant / "published_youtube.json"
+        record.write_text(json.dumps({"video_id": "test123", "thumbnail": "ok"}))
+        self.client.videos().list().execute.return_value = {"items": [
+            {"id": "test123", "processingDetails": {"processingStatus": "succeeded"}, "snippet": {"thumbnails": {}}}]}
+        with patch.object(youtube, "_service", return_value=self.client), \
+                patch.object(youtube, "set_thumbnail", side_effect=RuntimeError("refused")) as reset:
+            for _ in range(youtube.REPAIR_ATTEMPTS + 2):
+                youtube.repair_thumbnails(runs_dir)
+        self.assertEqual(reset.call_count, youtube.REPAIR_ATTEMPTS)
+        saved = json.loads(record.read_text())
+        self.assertEqual(saved["thumbnail_repair_failures"], youtube.REPAIR_ATTEMPTS)
+        self.assertIn("refused", saved["thumbnail"])
 
     def test_large_png_falls_back(self):
         with (self.variant / "cover.png").open("wb") as handle:

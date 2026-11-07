@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 import warnings
 
 from .media import ROOT, load
@@ -122,6 +123,51 @@ def _cover(variant_dir: Path) -> Path:
     return jpeg
 
 
+# Thumbnail key YouTube adds only when a cover was processed as a vertical (Shorts) image.
+VERTICAL = "shortsAspectRatio"
+PROCESSING_TIMEOUT_SEC = 300
+POLL_SEC = 15
+REPAIR_ATTEMPTS = 3
+
+
+def _processed(client, video_id, *, timeout=None, poll=POLL_SEC, sleep=time.sleep, clock=time.monotonic) -> bool:
+    """Wait until YouTube has finished processing the upload; False on timeout."""
+    deadline = clock() + (PROCESSING_TIMEOUT_SEC if timeout is None else timeout)
+    while True:
+        items = client.videos().list(part="processingDetails", id=video_id).execute().get("items", [])
+        status = items[0].get("processingDetails", {}).get("processingStatus") if items else None
+        if status == "succeeded":
+            return True
+        if status in ("failed", "rejected", "terminated"):
+            raise RuntimeError(f"video processing {status}")
+        if clock() >= deadline:
+            return False
+        sleep(poll)
+
+
+def _vertical(client, video_id) -> bool:
+    items = client.videos().list(part="snippet", id=video_id).execute().get("items", [])
+    return bool(items) and VERTICAL in items[0]["snippet"].get("thumbnails", {})
+
+
+def _set_cover(client, video_id, cover: Path, *, sleep=time.sleep, attempts=2, checks=6, poll=10) -> None:
+    """Set the custom cover after processing and confirm that YouTube made its vertical version.
+
+    A cover set while the video is still processing gets only 16:9 versions (no shortsAspectRatio):
+    Shorts feeds then show a small letterboxed cover or a frame instead (seen 2026-11-07).
+    """
+    if not _processed(client, video_id, sleep=sleep):
+        raise RuntimeError("video still processing; `vg publish youtube-thumbnails` sets the cover later")
+    for _ in range(attempts):
+        client.thumbnails().set(videoId=video_id, media_body=_media_upload(
+            cover, "image/png" if cover.suffix == ".png" else "image/jpeg")).execute()
+        for _ in range(checks):
+            if _vertical(client, video_id):
+                return
+            sleep(poll)
+    raise RuntimeError("YouTube made no vertical (shortsAspectRatio) thumbnail")
+
+
 def preview(variant_dir, privacy="private", publish_at=None, *, force=False) -> dict:
     variant_dir = Path(variant_dir)
     if (variant_dir / "published_youtube.json").exists() and not force:
@@ -146,7 +192,8 @@ def preview(variant_dir, privacy="private", publish_at=None, *, force=False) -> 
             "captions": str(local_file(variant_dir, "final.srt"))}
 
 
-def upload(variant_dir, privacy="private", publish_at=None, dry_run=False, *, force=False):
+def upload(variant_dir, privacy="private", publish_at=None, dry_run=False, *, force=False, cover=True):
+    """Upload a QA-passed variant; cover=False leaves the cover to set_thumbnail (it waits for processing)."""
     variant_dir = Path(variant_dir)
     if dry_run:
         return preview(variant_dir, privacy, publish_at, force=force)
@@ -159,10 +206,10 @@ def upload(variant_dir, privacy="private", publish_at=None, dry_run=False, *, fo
         except BlockingIOError as exc:
             raise ValueError("YouTube upload already in progress for this variant") from exc
         plan = preview(variant_dir, privacy, publish_at, force=force)
-        return _upload(variant_dir, privacy, plan)
+        return _upload(variant_dir, privacy, plan, cover)
 
 
-def _upload(variant_dir: Path, privacy: str, plan: dict):
+def _upload(variant_dir: Path, privacy: str, plan: dict, cover: bool = True):
     client = _service()
     # Quota (official docs checked 2026-11-06): videos.insert = 1 Video Uploads
     # bucket unit; thumbnails.set ~=50 general units; captions.insert =400 each.
@@ -177,7 +224,7 @@ def _upload(variant_dir: Path, privacy: str, plan: dict):
     video_id = response["id"]
     result = {"video_id": video_id, "url": f"https://youtube.com/shorts/{video_id}",
               "privacy": privacy, "uploaded_at": datetime.now(timezone.utc).isoformat(),
-              "thumbnail": "error: pending", "captions": "error: pending"}
+              "thumbnail": "error: pending" if cover else "pending", "captions": "error: pending"}
     if plan["body"]["status"].get("publishAt"):
         result["publish_at"] = plan["body"]["status"]["publishAt"]
     if "captions_en" in plan:
@@ -185,12 +232,11 @@ def _upload(variant_dir: Path, privacy: str, plan: dict):
     record = variant_dir / "published_youtube.json"
     # Persist the ID immediately: optional follow-up failures must never cause a duplicate video.
     _save_json(record, result)
-    for name in ("thumbnail", "captions", *(["captions_en"] if "captions_en" in plan else [])):
+    # Captions first: the cover waits for YouTube's processing, and an interrupted wait must not lose them.
+    for name in ("captions", *(["captions_en"] if "captions_en" in plan else []), *(["thumbnail"] if cover else [])):
         try:
             if name == "thumbnail":
-                cover = Path(plan["cover"])
-                client.thumbnails().set(videoId=video_id, media_body=_media_upload(
-                    cover, "image/png" if cover.suffix == ".png" else "image/jpeg")).execute()
+                _set_cover(client, video_id, Path(plan["cover"]))
             else:
                 client.captions().insert(part="snippet", body={"snippet": {
                     "videoId": video_id, "language": "en" if name == "captions_en" else "ja",
@@ -215,12 +261,47 @@ def set_thumbnail(variant_dir) -> dict:
     """Retry the custom thumbnail of an uploaded variant (e.g. after the channel's phone verification)."""
     variant_dir = Path(variant_dir)
     record, result = _published(variant_dir)
-    cover = _cover(variant_dir)
-    _service().thumbnails().set(videoId=result["video_id"], media_body=_media_upload(
-        cover, "image/png" if cover.suffix == ".png" else "image/jpeg")).execute()
+    _set_cover(_service(), result["video_id"], _cover(variant_dir))
     result["thumbnail"] = "ok"
+    result.pop("thumbnail_repair_failures", None)
     _save_json(record, result)
     return result
+
+
+def repair_thumbnails(root=None) -> list[dict]:
+    """Re-set the cover of every uploaded variant whose YouTube video has no vertical thumbnail.
+
+    Safety net for uploads whose cover could not be set after processing (timeout, interrupted run):
+    one videos.list call per 50 videos when nothing needs repair. Run hourly by scripts/daily_post.sh.
+    A variant is given up after REPAIR_ATTEMPTS failures, so a cover YouTube keeps refusing cannot
+    spend the upload quota every hour; `vg publish youtube-thumbnail RUN:vN` still retries it by hand.
+    """
+    records = {}
+    for path in sorted(Path(root or ROOT / "runs").glob("*/variants/*/published_youtube.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("video_id") and data.get("thumbnail_repair_failures", 0) < REPAIR_ATTEMPTS:
+            records[data["video_id"]] = path
+    if not records:
+        return []
+    client, repaired = _service(), []
+    ids = list(records)
+    for start in range(0, len(ids), 50):
+        response = client.videos().list(part="snippet,processingDetails", id=",".join(ids[start:start + 50])).execute()
+        for item in response.get("items", []):
+            if (item.get("processingDetails", {}).get("processingStatus") != "succeeded"
+                    or VERTICAL in item["snippet"].get("thumbnails", {})):
+                continue
+            path = records[item["id"]]
+            try:
+                result = set_thumbnail(path.parent)
+                repaired.append({"variant": str(path.parent), "video_id": item["id"], "thumbnail": result["thumbnail"]})
+            except Exception as exc:  # One broken variant must not stop the others.
+                data = json.loads(path.read_text(encoding="utf-8"))
+                data["thumbnail"] = f"error: {exc}"
+                data["thumbnail_repair_failures"] = data.get("thumbnail_repair_failures", 0) + 1
+                _save_json(path, data)
+                repaired.append({"variant": str(path.parent), "video_id": item["id"], "thumbnail": data["thumbnail"]})
+    return repaired
 
 
 def set_privacy(variant_dir, privacy: str) -> dict:

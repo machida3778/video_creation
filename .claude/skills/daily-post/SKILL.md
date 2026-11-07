@@ -36,7 +36,7 @@ Unattended: never ask questions. The user opted in to automatic uploads (2026-11
 - If a problem cannot be fixed in two attempts, do not publish (step 6).
 
 ## 5. Schedule
-`vg daily publish RUN:v1 --confirm`. It refuses when the slot is too close, the run is not the one started today, QA has not passed or the slot already has a video; report the refusal instead of working around it. If it reports that the request was already uploaded for an earlier slot (recovered after an interrupted upload), the item is done and this slot is still open: `vg daily next` and start again from step 2 with a new RUN.
+`vg daily publish RUN:v1 --confirm` (Bash timeout 600000 ms: after scheduling it waits for YouTube's processing, usually 1–3 min, to set the cover; a cover it could not set is set again by the hourly cron). It refuses when the slot is too close, the run is not the one started today, QA has not passed or the slot already has a video; report the refusal instead of working around it. If it reports that the request was already uploaded for an earlier slot (recovered after an interrupted upload), the item is done and this slot is still open: `vg daily next` and start again from step 2 with a new RUN.
 
 ## 6. Blockers
 On a temporary blocker (no idle GPU after waiting, QA or fact check keeps failing, missing tool, refused publish): `vg daily fail "<short Japanese reason>"` and stop. The item stays unchecked; the next cron attempt (hourly) resumes the same run for the next open slot. When the item itself is the problem (cannot be sourced, unsafe, unsupported), use `vg daily skip "<reason>"` instead; the next run moves to the following item.
