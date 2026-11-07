@@ -273,6 +273,38 @@ class Covers(Spec):
         return self
 
 
+class CoverScore(BaseModel):
+    """One option scored by the independent judge on the eight rubric items of docs/THUMBNAILS.md (① to ⑧)."""
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    items: list[int] = Field(min_length=8, max_length=8)
+    note: str = ""
+
+    @model_validator(mode="after")
+    def _range(self):
+        if any(type(value) is not int or not 0 <= value <= 2 for value in self.items):
+            raise ValueError(f"{self.id}: every rubric item is scored 0, 1 or 2")
+        return self
+
+    @property
+    def total(self) -> int:
+        return sum(self.items)
+
+
+class CoverJudgement(Spec):
+    """The judge's answer, recorded with `vg thumbnail RUN:vN --score FILE` into covers_report.json."""
+    judge: str = "claude-subagent"
+    round: int = Field(default=1, ge=1, le=3)   # 2 after the one redo the rubric allows
+    options: list[CoverScore] = Field(min_length=1, max_length=3)
+
+    @model_validator(mode="after")
+    def _unique(self):
+        ids = [option.id for option in self.options]
+        if len(set(ids)) != len(ids):
+            raise ValueError("duplicate cover ids in the judgement")
+        return self
+
+
 # ---------------------------------------------------------------- assets
 class Asset(BaseModel):
     model_config = ConfigDict(extra="forbid")

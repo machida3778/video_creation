@@ -52,6 +52,10 @@ class ReviewTest(unittest.TestCase):
         self.write(variant / "qa.json", {"checks": [{"id": "speech_rate", "passed": False, "severity": "warn"},
                                                     {"id": "hook", "passed": True, "severity": "block"}]})
         self.write(variant / "published_youtube.json", {"video_id": "AAA"})
+        self.write(variant / "covers_report.json", {"options": [], "chosen_id": "c1", "chosen_by": "judge", "scores": {
+            "judge": "claude-subagent", "round": 2, "options": {
+                "c1": {"items": [2, 2, 2, 1, 2, 2, 1, 1], "total": 13, "note": "n"},
+                "c2": {"items": [1] * 8, "total": 8, "note": "m"}}}})
         self.write(self.state / "state.json", {"days": {"2026-11-07 09:00": {
             "request": "自動の項目", "slot": "2026-11-07T09:00:00+09:00", "status": "scheduled", "video_id": "AAA"}}})
         Path(self.cfg["list"]).write_text("- [x] 自動の項目\n  - 自動追加 2026-11-06: 理由\n", encoding="utf-8")
@@ -71,6 +75,9 @@ class ReviewTest(unittest.TestCase):
         self.assertEqual((p["run"], p["type"], p["hook"], p["narrator"], p["speed"], p["bgm"]),
                          ("runs/r1", "ranking", "フック", "narrator_female", 1.4, "escort"))
         self.assertEqual((p["narration_seconds"], p["hook_options"], p["qa_warnings"]), (48.2, 4, ["speech_rate"]))
+        cover = p["cover"]
+        self.assertEqual((cover["id"], cover["chosen_by"], cover["judge_round"]), ("c1", "judge", 2))
+        self.assertEqual((cover["judge_scores"]["total"], cover["other_totals"]), (13, {"c2": 8}))
         self.assertIsNone(second["production"])
         self.assertTrue(out["due"])
 

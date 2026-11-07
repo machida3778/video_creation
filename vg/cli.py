@@ -12,6 +12,7 @@
   vg bgm list | suggest RUN [--n 3]
   vg compare RUN
   vg thumbnail RUN[:vN]            render cover options and crop previews
+  vg thumbnail RUN[:vN] --score FILE [--choose ID]   record the cover judge's scores / chosen cover
   vg en RUN[:vN] [--cpu]           English captions/dub; parent RUN batches all en.json variants
   vg publish auth youtube         authorize the optional official YouTube uploader
   vg publish youtube RUN:vN --confirm [--privacy private|unlisted|public] [--at ISO8601] [--dry-run]
@@ -315,7 +316,11 @@ def main(argv: list[str] | None = None) -> int:
     suggest.add_argument("run")
     suggest.add_argument("--n", type=int, default=3)
     sub.add_parser("compare").add_argument("run")
-    sub.add_parser("thumbnail").add_argument("run")
+    cover_cmd = sub.add_parser("thumbnail")
+    cover_cmd.add_argument("run")
+    cover_cmd.add_argument("--score", metavar="FILE", type=Path,
+                           help="record the independent judge's scores (CoverJudgement JSON) and choose the best")
+    cover_cmd.add_argument("--choose", metavar="ID", help="record the chosen cover (a person's choice)")
     publish = sub.add_parser("publish").add_subparsers(dest="publish_cmd", required=True)
     publish.add_parser("auth").add_argument("service", choices=["youtube"])
     youtube = publish.add_parser("youtube")
@@ -473,8 +478,19 @@ def main(argv: list[str] | None = None) -> int:
             runs.mark(directory, "en", "done")
         return 0
     if a.cmd == "thumbnail":
-        from .thumbnail import thumbnail
-        print(thumbnail(run))
+        if a.score is None and a.choose is None:
+            from .thumbnail import thumbnail
+            print(thumbnail(run))
+            return 0
+        from .schemas import CoverJudgement
+        from .thumbnail import record
+        try:
+            judgement = (CoverJudgement.model_validate_json(a.score.read_text(encoding="utf-8"))
+                         if a.score is not None else None)
+            print(json.dumps(record(run, judgement, a.choose), ensure_ascii=False, indent=2))
+        except (ValueError, FileNotFoundError) as exc:
+            print(f"thumbnail: {exc}", file=sys.stderr)
+            return 1
         return 0
     if a.cmd == "yomi":
         return cmd_yomi(run, a.approve)

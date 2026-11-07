@@ -76,16 +76,16 @@ def production(base: Path) -> dict:
     speed = ((script.get("voice_overrides") or {}).get("narrator") or {}).get("speed")
     report = _read(base / "covers_report.json")
     covers = {o.get("id"): o for o in _read(base / "covers.json").get("options", [])}
+    from .thumbnail import scores, selected_cover
     try:
-        from .thumbnail import selected_cover
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             chosen = selected_cover(base)
     except Exception:  # noqa: BLE001 - older runs without a valid report
         chosen = report.get("chosen_id")
-    scores = report.get("scores")
-    if isinstance(scores, dict) and chosen in scores:
-        scores = scores[chosen]
+    # Scores survive a new render only for an unchanged cover, so they describe the cover that is used now.
+    judged = scores(report.get("scores")) or {}
+    judge_scores = (judged.get("options") or {}).get(chosen)
     qa = _read(base / "qa.json").get("checks", [])
     run = base.parent.parent if base.parent.name == "variants" else base
     return {
@@ -98,7 +98,11 @@ def production(base: Path) -> dict:
         "hashtags": publish.get("hashtags"),
         "cover": {"id": chosen, "template": (covers.get(chosen) or {}).get("template"),
                   "text": (covers.get(chosen) or {}).get("text"),
-                  "cover_only_image": bool((covers.get(chosen) or {}).get("prompt")), "judge_scores": scores},
+                  "cover_only_image": bool((covers.get(chosen) or {}).get("prompt")),
+                  "chosen_by": report.get("chosen_by"), "judge_scores": judge_scores,
+                  "judge_round": judged.get("round") if judge_scores else None,
+                  "other_totals": {key: value.get("total") for key, value in (judged.get("options") or {}).items()
+                                   if key != chosen and isinstance(value, dict)}},
         "qa_warnings": [c.get("id") for c in qa if not c.get("passed") and c.get("severity") == "warn"],
         "english": (base / "en.json").is_file(),
     }

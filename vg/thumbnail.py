@@ -1,14 +1,16 @@
 """Offline thumbnail layout, Remotion stills and crop/contact-sheet previews."""
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import os
 from pathlib import Path
+import warnings
 
 from PIL import Image, ImageDraw
 
 from .media import FFMPEG, ROOT, load, run, scrubbed_env
-from .schemas import CoverOption, visible_chars
+from .schemas import CoverJudgement, CoverOption, visible_chars
 from .variants import local_file
 
 PALETTES = {"yellow": "#ffd400", "red": "#ff3b30", "white": "#ffffff"}
@@ -109,9 +111,10 @@ def thumbnail(run_dir: Path) -> Path:
     assets = {asset.id: asset for asset in manifest.assets}
     output = run_dir / "thumbs"
     output.mkdir(exist_ok=True)
-    # Invalidate any previous successful report before attempting a new render.
+    # Invalidate any previous successful report before attempting a new render; the judge's record
+    # (chosen_id, scores) is set aside and carried over below for options that did not change.
     report_path = run_dir / "covers_report.json"
-    report_path.unlink(missing_ok=True)
+    earlier = _set_aside(run_dir)
     reports = []
     env = scrubbed_env()
     env["PATH"] = str(Path.home() / ".local/opt/node/bin") + os.pathsep + env.get("PATH", "")
@@ -165,7 +168,120 @@ def thumbnail(run_dir: Path) -> Path:
                     image.thumbnail((width, 620))
                     sheet.paste(image, (x, y + 40))
     sheet.save(output / "sheet.jpg", quality=90)
-    report_path.write_text(json.dumps({"options": reports}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    report = {"options": reports} | _kept(earlier, covers.options, reports)
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (run_dir / PREVIOUS_REPORT).unlink(missing_ok=True)
     if not any(item["passed"] for item in reports):
         raise ValueError("no passing covers (see covers_report.json); shorten the headline")
     return report_path
+
+
+# ---------------------------------------------------------------- the judge's record
+# covers_report.json keeps, next to the checks above, the independent judge's verdict (docs/THUMBNAILS.md
+# 「採点と選び方」): "chosen_id", "chosen_by" ("judge" or "choose") and
+# "scores": {"judge", "round", "scored_at", "options": {id: {"items": [① .. ⑧], "total", "note"}}}.
+PREVIOUS_REPORT = "covers_report.previous.json"   # the last report while vg thumbnail renders again
+VETO = (1, 3, 5, 6)   # ② ④ ⑥ ⑦: an option with 0 on any of them is not used
+STRONG = (3, 6)       # ④ ⑦: the rubric asks for an option with 2 on both
+BAR = 12              # below this best total the rubric asks for one redo
+
+
+def _read(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _set_aside(run_dir: Path) -> dict:
+    """Move the current report aside (selected_cover no longer trusts it) and return it. A report a failed
+    render left aside earlier is used when there is no current one, so a retry still finds the judge's record."""
+    report, aside = run_dir / "covers_report.json", run_dir / PREVIOUS_REPORT
+    if report.is_file():
+        previous = _read(report)
+        report.replace(aside)
+        return previous
+    return _read(aside)
+
+
+def scores(raw) -> dict | None:
+    """The judge's scores in the stored shape. Reports written by hand before `--score` kept the per-option
+    entries at the top level next to "judge"; those are read as the same shape."""
+    if not isinstance(raw, dict):
+        return None
+    if isinstance(raw.get("options"), dict):
+        return raw
+    options = {key: value for key, value in raw.items() if isinstance(value, dict)}
+    meta = {key: value for key, value in raw.items() if not isinstance(value, dict)}
+    return meta | {"options": options} if options else None
+
+
+def _kept(previous: dict, options: list[CoverOption], reports: list[dict]) -> dict:
+    """What the new report keeps from the previous one: chosen_id while that option still passes, and the scores
+    of options unchanged since they were judged (a new headline or image needs a new judgement)."""
+    old = {item.get("id"): item.get("option") for item in previous.get("options", []) if isinstance(item, dict)}
+    unchanged = {option.id for option in options if option.id in old and _same(old[option.id], option)}
+    passed = {item["id"] for item in reports if item["passed"]}
+    kept: dict = {}
+    chosen = previous.get("chosen_id")
+    if chosen in passed:
+        kept["chosen_id"] = chosen
+        if previous.get("chosen_by"):
+            kept["chosen_by"] = previous["chosen_by"]
+    elif chosen is not None:
+        warnings.warn(f"chosen cover {chosen!r} no longer passes the checks; choose again with "
+                      "vg thumbnail RUN:vN --score FILE or --choose ID", stacklevel=2)
+    judged = scores(previous.get("scores"))
+    if judged:
+        entries = {key: value for key, value in judged["options"].items() if key in unchanged}
+        if entries:
+            kept["scores"] = judged | {"options": entries}
+    return kept
+
+
+def record(run_dir: Path, judgement: CoverJudgement | None = None, choose: str | None = None) -> dict:
+    """Store the judge's scores and the chosen cover in covers_report.json. Without `choose` the best usable option
+    is chosen: the highest total among options with no 0 on ②④⑥⑦ (earlier in covers.json on a tie), or the
+    highest total when none is usable. `bar_met` is false when the rubric asks for a redo."""
+    if judgement is None and choose is None:
+        raise ValueError("give the judge's scores (--score FILE) or a cover id (--choose ID)")
+    run_dir = Path(run_dir).resolve()
+    path = run_dir / "covers_report.json"
+    if not path.is_file():
+        raise ValueError("no covers_report.json; run vg thumbnail first")
+    original = path.read_text(encoding="utf-8")
+    report = json.loads(original)
+    rendered = {item.get("id"): item for item in report.get("options", []) if item.get("passed") is True}
+    order = [option.id for option in load(run_dir, "covers").options
+             if option.id in rendered and _same(rendered[option.id].get("option"), option)]
+    if not order:
+        raise ValueError("no passing covers; run vg thumbnail first")
+    result: dict = {}
+    if judgement is not None:
+        unknown = [item.id for item in judgement.options if item.id not in order]
+        if unknown:
+            raise ValueError(f"not rendered by the last vg thumbnail, failed its checks or changed since: "
+                             f"{', '.join(unknown)}")
+        judged = sorted(judgement.options, key=lambda item: order.index(item.id))
+        report["scores"] = {"judge": judgement.judge, "round": judgement.round,
+                            "scored_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                            "options": {item.id: {"items": item.items, "total": item.total, "note": item.note}
+                                        for item in judged}}
+        usable = [item for item in judged if all(item.items[i] for i in VETO)]
+        best = max(usable or judged, key=lambda item: (item.total, -order.index(item.id)))
+        strong = [item.id for item in usable if all(item.items[i] == 2 for i in STRONG)]
+        result = {"best": best.id, "total": best.total, "usable": [item.id for item in usable],
+                  "strong_image": strong, "bar_met": bool(usable) and best.total >= BAR and bool(strong)}
+        report["chosen_id"], report["chosen_by"] = best.id, "judge"
+    if choose is not None:
+        if choose not in order:
+            raise ValueError(f"{choose}: not a cover that passed the last vg thumbnail")
+        report["chosen_id"], report["chosen_by"] = choose, "choose"
+    path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    try:
+        selected = selected_cover(run_dir)  # the same checks vg package applies
+    except Exception:
+        path.write_text(original, encoding="utf-8")
+        raise
+    return result | {"chosen_id": selected, "chosen_by": report["chosen_by"], "report": str(path)}
