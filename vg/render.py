@@ -27,8 +27,10 @@ def write_srt(timeline, path):
     return path
 
 
-def loudnorm(src, dst, *, target_i=-14, audio_only=False):
-    """Use measured loudnorm values in a second pass, preserving the video stream."""
+def loudnorm(src, dst, *, target_i=-14, audio_only=False, duration=None):
+    """Use measured loudnorm values in a second pass, preserving the video stream.
+
+    duration caps the output: loudnorm's dynamic mode can flush extra samples at the end."""
     target = f"loudnorm=I={target_i}:TP=-1.5:LRA=11"
     first = run([str(FFMPEG), "-hide_banner", "-nostdin", "-i", str(src), "-vn",
                  "-af", target + ":print_format=json", "-f", "null", "-"])
@@ -45,7 +47,9 @@ def loudnorm(src, dst, *, target_i=-14, audio_only=False):
     video = [] if audio_only else ["-map", "0:v:0", "-c:v", "copy"]
     run([str(FFMPEG), "-hide_banner", "-nostdin", "-y", "-i", str(src), *video,
          "-map", "0:a:0", "-af", target + ":" + settings + ":linear=true",
-         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(dst)])
+         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+         *(["-t", f"{duration:.3f}"] if duration is not None else []),
+         "-movflags", "+faststart", str(dst)])
     return Path(dst)
 
 

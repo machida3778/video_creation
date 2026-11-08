@@ -191,7 +191,7 @@ def generate_many(directories, *, tts=None, cpu=False):
         if target is None or not -70 < target < -5:
             raise ValueError("Japanese audio loudness is outside loudnorm's supported range")
         temporary = directory / "en" / "dub.m4a"
-        loudnorm(mixed, temporary, target_i=target, audio_only=True)
+        loudnorm(mixed, temporary, target_i=target, audio_only=True, duration=duration)
         if abs(audio_duration(temporary)-duration) > 0.05:
             raise ValueError("English dub audio duration differs from Japanese by more than 50 ms")
         if abs(measure_level([temporary])["integrated_lufs"]-target) > 1:
