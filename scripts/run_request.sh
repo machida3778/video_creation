@@ -97,7 +97,7 @@ if [[ ${RUN_REQUEST_DRY:-0} == 1 ]]; then
   exit 0
 fi
 
-# Start only while Claude subscription usage is at or under headless.max_usage_percent (vg/usage.py).
+# Start only while Claude subscription usage is at or under headless.max_usage_percent per window (vg/usage.py).
 # Over the limit or unknown: exit 75 without starting; the next cron or queue attempt checks again.
 usage_status=0
 env "${scrub[@]}" "$REPO/.venv/bin/vg" usage --check || usage_status=$?

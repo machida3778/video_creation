@@ -27,13 +27,32 @@ class UsageTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "headless.yaml"
             path.write_text("max_usage_percent: 55\n", encoding="utf-8")
-            self.assertEqual(usage.limit(path), 55)
+            self.assertEqual(usage.limit(path), {"five_hour": 55, "seven_day": 55})
             path.write_text("max_minutes: 10\n", encoding="utf-8")
-            self.assertEqual(usage.limit(path), 70)
+            self.assertEqual(usage.limit(path), {"five_hour": 70, "seven_day": 70})
             path.write_text("max_usage_percent: 0\n", encoding="utf-8")
             with self.assertRaises(ValueError):
                 usage.limit(path)
-        self.assertEqual(usage.limit(), 70)  # the repository setting
+            path.write_text("max_usage_percent: {five_hour: 70, seven_day: 90}\n", encoding="utf-8")
+            self.assertEqual(usage.limit(path), {"five_hour": 70, "seven_day": 90})
+            path.write_text("max_usage_percent: {seven_day: 90}\n", encoding="utf-8")
+            self.assertEqual(usage.limit(path), {"five_hour": 70, "seven_day": 90})
+            path.write_text("max_usage_percent: {weekly: 90}\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                usage.limit(path)
+        self.assertEqual(usage.limit(), {"five_hour": 70, "seven_day": 90})  # the repository setting
+
+    def test_per_window_limits(self):
+        limits = {"five_hour": 70, "seven_day": 90}
+        weekly_77 = {"five_hour": {"used_percentage": 0, "resets_at": 2_000},
+                     "seven_day": {"used_percentage": 77, "resets_at": 9_000}}
+        self.assertTrue(usage.evaluate(weekly_77, limits, 1_000)["ok"])
+        weekly_91 = {"seven_day": {"used_percentage": 91, "resets_at": 9_000}}
+        result = usage.evaluate(weekly_91, limits, 1_000)
+        self.assertFalse(result["ok"])
+        self.assertIn("週間枠上限90%超", usage.summary(result))
+        hour_71 = {"five_hour": {"used_percentage": 71, "resets_at": 2_000}}
+        self.assertIn("5時間枠上限70%超", usage.summary(usage.evaluate(hour_71, limits, 1_000)))
 
     def test_check_fails_closed(self):
         with patch.object(usage, "probe", side_effect=RuntimeError("no answer")):

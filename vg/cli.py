@@ -20,7 +20,7 @@
   vg daily add "<request>" --reason "..." | start "<request>" --run RUN | fail "<reason>" | skip "<reason>"
   vg daily publish RUN:vN --confirm [--dry-run]   schedule for the run's slot (private + publishAt)
   vg daily review [--due | --done "<summary>"]     once-a-day performance review data (local/insights.md)
-  vg usage [--check]               Claude subscription usage; --check exits 0 at or under headless.max_usage_percent
+  vg usage [--check]               Claude subscription usage; --check exits 0 when each window is at or under headless.max_usage_percent
   vg analyze VIDEO [--json PATH]    measure pixels/audio and write a six-frame contact sheet
   vg sfx build                     synthesize the original local sound-effect library
   vg feedback RUN "<text>" [--variant vN] | vg feedback RUN --show

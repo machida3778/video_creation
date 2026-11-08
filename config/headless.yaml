@@ -89,7 +89,10 @@ allowed_tools:
   - 'Bash(tail:*)'
   - 'Bash(pwd)'
 max_minutes: 180
-# Start a video only when both Claude subscription windows (5 hours, 7 days) are at or under this percent
-# (user rule 2026-11-06). Checked by `vg usage --check` in scripts/run_request.sh before Claude starts.
-max_usage_percent: 70
+# Start a video only when each Claude subscription window is at or under its percent
+# (user rules 2026-11-06 and 2026-11-08). One number applies to both windows.
+# Checked by `vg usage --check` in scripts/run_request.sh before Claude starts.
+max_usage_percent:
+  five_hour: 70
+  seven_day: 90
 model: ""  # empty uses the account default
