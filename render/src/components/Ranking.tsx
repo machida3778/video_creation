@@ -1,7 +1,7 @@
 import React from 'react';
 import {Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
 import type {CountdownProps, RankCardProps, RankScrollProps} from '../types';
-import {FONT} from './Caption';
+import {FONT, useSafeArea} from './Caption';
 
 // Clip every moving element to the platform safe area, including text and pop overshoot.
 const safeArea: React.CSSProperties = {
@@ -22,8 +22,9 @@ export const RankCard: React.FC<{props: RankCardProps}> = ({props}) => {
   const pop = spring({frame, fps, config: {damping: 14, stiffness: 220}});
   const progress = interpolate(frame, [0, 0.6 * fps], [0, 1], {extrapolateRight: 'clamp'});
   const color = props.color ?? '#ffd400';
+  const area = useSafeArea(safeArea);
   return (
-    <div style={safeArea}>
+    <div style={area}>
       <div style={{position: 'absolute', top: 100, left: 100, width: 580, height: 170,
         display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 36,
         background: color, color: '#111', fontSize: 96, fontWeight: 900,
@@ -49,11 +50,12 @@ export const Countdown: React.FC<{props: CountdownProps}> = ({props}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const t = frame / (0.6 * fps);
+  const area = useSafeArea(safeArea);
   if (t >= 1) return null;
   const enter = Math.min(1, t / 0.2);
   const leave = Math.min(1, (1 - t) / 0.2);
   return (
-    <div style={safeArea}>
+    <div style={area}>
       <div style={{...text, top: 1090, fontSize: 64, color: '#ffe066', opacity: enter * leave,
         transform: `translateY(${(1 - enter) * 25 - (1 - leave) * 25}px)`}}>
         {props.from} → {props.to}
@@ -65,6 +67,7 @@ export const Countdown: React.FC<{props: CountdownProps}> = ({props}) => {
 export const RankScroll: React.FC<{props: RankScrollProps}> = ({props}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
+  const area = useSafeArea({...safeArea, background: '#102033'});
   if (!props.items.length) return null;
   const pitch = 370;
   const cycle = props.items.length * pitch;
@@ -72,7 +75,7 @@ export const RankScroll: React.FC<{props: RankScrollProps}> = ({props}) => {
   // Repeat enough cards to cover the viewport even with only one item; wrap offscreen seamlessly.
   const cards = Array.from({length: props.items.length + 3}, (_, i) => props.items[i % props.items.length]);
   return (
-    <div style={{...safeArea, background: '#102033'}}>
+    <div style={area}>
       <div style={{position: 'absolute', top: 210, left: 30, display: 'flex', gap: 30,
         transform: `translateX(${-offset}px)`}}>
         {cards.map((item, i) => (

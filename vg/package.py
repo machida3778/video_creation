@@ -125,9 +125,15 @@ def package(run_dir) -> Path:
         research = load(run_dir, "research")
         if research.sources:
             parts.append("出典\n" + "\n".join(f"- {s.title} {s.url}" for s in research.sources))
-    credits = list(dict.fromkeys(a.credit.strip() for a in manifest.assets if a.credit and a.credit.strip()))
+    credits = list(dict.fromkeys(a.credit.strip() for a in manifest.assets if a.credit and a.credit.strip()
+                                 and not a.params.get("credit_first")))
     if credits:
         parts.append("\n".join(credits))
+    # Clip guidelines (config/licenses.yaml credit_first) want the source video named at the very top.
+    first = list(dict.fromkeys(a.credit.strip() for a in manifest.assets if a.credit and a.credit.strip()
+                               and a.params.get("credit_first")))
+    if first:
+        parts.insert(0, "\n".join(first))
     if script.search_query and script.search_query not in "\n\n".join(parts):
         parts.insert(1, f"{script.search_query}について解説します。")
     board = load(run_dir, "storyboard") if (run_dir / "storyboard.json").is_file() else None

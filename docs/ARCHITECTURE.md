@@ -37,6 +37,14 @@ Implemented deterministic checks cover media format, duration, loudness and true
 
 Agents also review facts, pronunciation, visual coherence, originality, licences and AI-content disclosure. ASR-based pronunciation checking and automated visual/factual review are extension points, not current machine checks. Passing technical QA does not replace human editorial review.
 
+## Formats from reference videos
+
+A format is a reusable presentation and structure learned from a Short the user liked (`.claude/skills/learn-format`). `vg reference add SOURCE --id ID` (`vg/reference.py`) fetches a URL with yt-dlp (through `uvx`, with subtitles when the platform has them) or copies a local file into the ignored `local/formats/<id>/reference/`, measures shots, loudness, audio activity and narration rate, and writes frame sheets (hook, first frame of each shot, even sample, three full-size frames). The agent reads them and writes `format.json` (`FormatProfile`): beat structure, pacing, script/visual/audio rules and a `Layout`. `vg format preview` renders the layout as a still beside a reference frame for correction.
+
+A run uses a format through `route.format` and `storyboard.format`; `storyboard.header` fills the layout's header band. `vg timeline` copies the layout into `timeline.json`; the renderer places the base picture in the frame (full bleed with optional dimming, or a box over a blurred or flat fill), draws the header/footer bands and progress bar, and styles captions and title cards. Caption breaking and the `safe_area` check use the layout's caption size and width, and also check the header text; the schema keeps every band and caption block inside the Shorts safe area. Only presentation and structure are reused; scripts and media are always new.
+
+Outside pictures of real talents come from `vg image add` (`vg/library.py`) under licences listed in `config/licenses.yaml`, e.g. a still from a talent's public stream under a published clip guideline. The manifest records the licence URL, the source video and the credit; credits marked `credit_first` lead the packaged description.
+
 ## Variants and recombination
 
 A run shares its brief, route and research across independent `variants/vN/` directories. Each candidate owns its script, voice settings, storyboard, licensed assets and derived outputs. `vg compare` prepares a comparison for human selection.

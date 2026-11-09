@@ -10,7 +10,7 @@ import unicodedata
 
 import budoux
 
-from .schemas import Caption, Line, LineTiming
+from .schemas import Caption, Layout, Line, LineTiming
 
 PARSER = budoux.load_default_japanese_parser()
 MAX_EM = 11.5
@@ -124,9 +124,38 @@ def layout(text: str, max_em: float = MAX_EM, emphasis: list[str] | tuple[str, .
     return ["\n".join(p) for p in pages]
 
 
-def captions_for_line(line: Line, timing: LineTiming, style: str = "default") -> list[Caption]:
+def caption_box(style: str, look: Layout | None = None) -> tuple[float, float]:
+    """(font px, usable width px) of a caption style; a format's layout overrides the default look.
+    Shared by caption layout here and the safe_area check in vg/qa.py, and mirrored by Caption.tsx."""
+    if look is None:
+        return FONT_PX.get(style, FONT_PX["default"]), 780.0
+    # Caption.tsx CaptionView: title-style captions use layout.title when present, else layout.caption.
+    chosen = look.title if style == "title" and look.title else look.caption
+    # Text must fit inside max_width together with the box padding (0.25 em each side) and the outline.
+    width = chosen.max_width - (0.5 * chosen.size if chosen.box else 0) - (
+        chosen.size * chosen.stroke_ratio if chosen.stroke else 0)
+    return chosen.size, width
+
+
+def band_width(row: str, size: float) -> float:
+    """Drawn width of one header/footer row: Short.tsx Band colours emphasis words without enlarging them."""
+    return size * em(row)
+
+
+def band_text(text: str, size: float) -> str:
+    """Header/footer band text: explicit '\\n' breaks are kept; otherwise BudouX breaks it into at most two
+    balanced lines of the 780 px safe width (a longer text is left on one page and fails safe_area)."""
+    if "\n" in text:
+        return text
+    pages = layout(text, 780 / size)
+    return pages[0] if len(pages) == 1 else text
+
+
+def captions_for_line(line: Line, timing: LineTiming, style: str = "default",
+                      look: Layout | None = None) -> list[Caption]:
     """Split one script line into caption pages over its audio, timed by character share."""
-    pages = layout(line.text, min(MAX_EM, 780 / FONT_PX.get(style, FONT_PX["default"])), line.emphasis)
+    font_px, width = caption_box(style, look)
+    pages = layout(line.text, min(MAX_EM * width / 780, width / font_px), line.emphasis)
     weights = [max(1.0, em(p.replace("\n", ""))) for p in pages]
     total, t, out = sum(weights), timing.start, []
     for page, w in zip(pages, weights):

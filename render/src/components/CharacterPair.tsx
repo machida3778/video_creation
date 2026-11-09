@@ -1,16 +1,17 @@
 import React from 'react';
 import {Img, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
 import type {CharacterPairProps} from '../types';
-import {FONT} from './Caption';
+import {FONT, useSafeArea} from './Caption';
 
 export const CharacterPair: React.FC<{props: CharacterPairProps}> = ({props}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const time = frame / fps;
   const active = (props.speaking ?? []).filter((s) => s.start <= time && time < s.end);
+  const area = useSafeArea({position: 'absolute', left: 120, top: 240, width: 780, height: 1200,
+    overflow: 'hidden', pointerEvents: 'none', fontFamily: FONT});
   return (
-    <div style={{position: 'absolute', left: 120, top: 240, width: 780, height: 1200,
-      overflow: 'hidden', pointerEvents: 'none', fontFamily: FONT}}>
+    <div style={area}>
       {(['a', 'b'] as const).map((speaker, i) => {
         const character = props[speaker];
         const interval = active.find((s) => s.speaker === speaker);

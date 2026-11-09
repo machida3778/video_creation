@@ -25,6 +25,8 @@ Read the candidate `types/*/type.yaml` (optionally `local/VIDEO_TYPES.md` when p
 - If the request fits a planned type that is not implemented yet, produce the nearest implemented type when that still answers the request honestly; otherwise stop and report.
 - Set `brief.target_sec`/`max_sec` from the type's `length` (use the strictest platform limits).
 
+**Format (learned from a reference video).** Use a format when the request names one (「<id>のフォーマットで」), includes a reference video URL (run the `learn-format` skill first, without asking, then continue), or `local/preferences.yaml` `formats.default` names one whose `types` include the chosen type. List them with `vg format list`; read the chosen one with `vg format show <id>` and set `route.format`. Then the format's `structure` sets the beats of the script, `script_rules` the wording, `pacing.target_sec` the length (within the type's limits), `pacing.narration_speed` the voice speed (`voice_overrides`), `visual_rules`/`audio_rules` the storyboard, images and BGM, and `pacing.max_static_sec` the longest hold. The format never overrides facts, the hard rules, QA, `local/insights.md` hook/cover rules that do not conflict, or the user's request. Copy only presentation and structure — never the reference's lines, images or catchphrases.
+
 ## 3. Research (when the type requires it)
 Use web search/fetch (no paid APIs) to collect at least `research.min_sources` reliable sources: official, government, academic, encyclopedic or major-newspaper pages; record title, publisher, URL, published and accessed dates. Write `RUN/research.json`: one `Fact` per claim, citing source ids; mark `confirmed` only when a primary or two independent sources agree. Avoid topics you cannot source.
 
@@ -48,6 +50,10 @@ After yomi approval, write `en.json` per variant (`English` in `vg/schemas.py`):
 
 ## 7. Storyboard and assets
 Follow `types/<type>/prompts/storyboard.md`. Scenes must cover every line exactly once, in order, using only components the renderer knows (`render/src/components/registry.tsx` COMPONENTS). Scenes with `visual.kind: t2i` get images from `vg assets RUN` (Z-Image Turbo on an idle lab GPU, recorded in `assets/manifest.json` with prompt, seed and licence). If no lab GPU is idle, wait and retry later, or fall back to backgrounds and say so in the report.
+
+With a format, set `storyboard.format` to `route.format`; when its layout has a header band, write `storyboard.header` by the format's `header_rule` (≤ 2 lines; put `\n` where the break reads naturally). `vg timeline` applies the layout (picture frame, header, caption look, progress bar) and QA checks the text against it.
+
+**Real people and characters (VTubers, streamers).** When the video is about specific talents, show them, not AI look-alikes: viewers must recognise who each item is. Take stills from the talent's own public streams or videos under their published clip guideline: `vg image add RUN:vN <video URL> --at <seconds> --id <asset id> --license hololive_clip --subject "<name>, <scene>"` (other creators: `--license creator_clip --guideline <URL of their guideline, checked to allow monetised clips>`). Pick a moment where the face/avatar is clear and centred, without other people's overlays. It records the licence, the source video and the credit; packaging puts 「元動画: title + URL」 at the top of the description as the guidelines require. Use the asset id as `visual.ref` with `visual.kind: library`. Do not use official illustrations or profile art as-is (Hololive's guideline says unmodified official content is outside the derivative-work permission), members-only or ticketed streams, or anything implying the video is official.
 
 ## 8. Assets, render, QA, package
 With `en.json`, use step 6b's explicit stage order; render all variants before the single batched `vg en RUN`, then QA/package each variant.

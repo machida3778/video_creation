@@ -1,7 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
 import type {CharacterPairProps, Clip, CountdownProps, RankCardProps, RankScrollProps} from '../types';
-import {CaptionLines, FONT} from './Caption';
+import {CaptionLines, contentArea, FONT, LayoutContext, LookLines} from './Caption';
 import {CharacterPair} from './CharacterPair';
 import {Countdown, RankCard, RankScroll} from './Ranking';
 
@@ -59,14 +59,27 @@ const TitleCard: React.FC<{props: P}> = ({props}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const pop = spring({frame, fps, config: {damping: 12, stiffness: 180}, durationInFrames: 12});
+  const layout = React.useContext(LayoutContext);
+  const look = layout?.title;
+  const emphasis = (props.emphasis as string[]) ?? [];
+  // Two title lines (1.2x emphasis) must start below a format's header band.
+  const half = (look?.size ?? 84) * 1.28 * 1.1;
+  // ...and end above the captions (the schema leaves >= 420 px between the two).
+  const y = layout
+    ? Math.min(Math.max(num(props.y, 560), contentArea(layout).top + half + 10),
+      layout.caption.y - layout.caption.size * 1.45 - half)
+    : num(props.y, 560);
   return (
     <AbsoluteFill>
       {props.background !== false && <Background props={props} />}
-      <AbsoluteFill style={{transform: `scale(${0.85 + 0.15 * pop})`, opacity: pop, transformOrigin: '50% 30%'}}>
-        <CaptionLines text={str(props.text)} emphasis={(props.emphasis as string[]) ?? []} style="title" centerY={num(props.y, 560)} />
+      <AbsoluteFill style={{transform: `scale(${0.85 + 0.15 * pop})`, opacity: pop,
+        transformOrigin: layout ? `50% ${y}px` : '50% 30%'}}>
+        {look
+          ? <LookLines text={str(props.text)} emphasis={emphasis} look={look} centerY={y} />
+          : <CaptionLines text={str(props.text)} emphasis={emphasis} style="title" centerY={y} />}
       </AbsoluteFill>
       {str(props.sub) && (
-        <div style={{position: 'absolute', top: num(props.y, 560) + 190, left: 120, width: 780, textAlign: 'center',
+        <div style={{position: 'absolute', top: y + 190, left: 120, width: 780, textAlign: 'center',
           fontFamily: FONT, fontWeight: 700, fontSize: 40, color: '#e8edf2', whiteSpace: 'pre-line'}}>
           {str(props.sub)}
         </div>
@@ -76,12 +89,16 @@ const TitleCard: React.FC<{props: P}> = ({props}) => {
 };
 
 // Small label near the top of the safe area, e.g. 「出典: 総務省 統計局」.
-const SourceCard: React.FC<{props: P}> = ({props}) => (
-  <div style={{position: 'absolute', top: 250, left: 120, maxWidth: 780, padding: '10px 22px', borderRadius: 14,
-    background: 'rgba(0,0,0,0.55)', color: '#f5f7fa', fontFamily: FONT, fontWeight: 700, fontSize: 30, lineHeight: 1.3}}>
-    {str(props.text)}
-  </div>
-);
+const SourceCard: React.FC<{props: P}> = ({props}) => {
+  const layout = React.useContext(LayoutContext);
+  return (
+    <div style={{position: 'absolute', top: layout ? contentArea(layout).top : 250, left: 120, maxWidth: 780,
+      padding: '10px 22px', borderRadius: 14, background: 'rgba(0,0,0,0.55)', color: '#f5f7fa', fontFamily: FONT,
+      fontWeight: 700, fontSize: 30, lineHeight: 1.3}}>
+      {str(props.text)}
+    </div>
+  );
+};
 
 const Placeholder: React.FC<{name: string}> = ({name}) => (
   <AbsoluteFill style={{background: '#5a0040', color: '#fff', fontFamily: FONT, fontSize: 48, justifyContent: 'center', alignItems: 'center'}}>
