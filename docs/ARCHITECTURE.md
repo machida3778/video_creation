@@ -29,6 +29,8 @@ Recipes in `types/<id>/type.yaml` define routing criteria, length limits, compon
 
 Speech precedes storyboard timing so scene durations follow actual narration. Each run has a `state.json`; stages can resume from the earliest changed input. Specifications are validated by Pydantic models in `vg/schemas.py`, and stage storage uses atomic writes.
 
+`ranking_montage` is an experimental `music_motion` recipe without narration. Its storyboard precedes `vg tts`: one scene per script label with explicit `props.sec` produces cumulative display timings and empty audio paths, without contacting a speech engine. Timeline assembly omits voice clips, captions and the narration tail while retaining BGM mixing. Full-bleed stills carry serif `rank_label` overlays, a base-media `mirror` entrance and escalating tier effects; `section_card` draws an original procedural starfield. The assets stage records the system Noto Serif CJK JP font licence. Music QA counts label/card text for hook and coverage, skips speech/yomi checks and retains the normal tempo limit; factual rankings still require sources and editorial fact checking.
+
 ## QA gates
 
 Implemented deterministic checks cover media format, duration, loudness and true peak, black frames, long silence, caption safe area and caption timing. `config/style.yaml` also sets hook timing, maximum visual holds, speech rate, caption/title coverage, character-3-gram script originality and SFX density. Originality compares other runs, excluding all variants of the current run. Realistic image/video assets require synthetic-media disclosure; packaging sets the flag from manifest metadata and prompts, and QA catches an existing false flag. Blocking failures stop packaging; warnings remain visible in comparison reports.

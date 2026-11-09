@@ -79,6 +79,15 @@ def load_types(types_dir: Path = TYPES_DIR) -> dict[str, TypeSpec]:
     return types
 
 
+def timing_for_run(run: Path) -> str:
+    """Legacy runs without a route retain narration timing."""
+    from .media import load
+    if not (Path(run) / "route.json").is_file():
+        return "narration"
+    spec = load_types().get(load(run, "route").type_id)
+    return spec.timing if spec else "narration"
+
+
 def load_voice_defaults(path: Path = VOICES_FILE) -> dict[str, str]:
     return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("defaults", {})
 

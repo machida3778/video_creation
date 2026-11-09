@@ -129,6 +129,19 @@ def _prepare(run: Path, board: Storyboard, manifest: Manifest | None = None, *,
              bgm_tracks: dict[str, BgmTrack] | None = None, library_root: Path | None = None) -> Manifest:
     """Resolve local assets before scheduling any GPU work."""
     manifest = manifest or Manifest()
+    components = {sc.component for sc in board.scenes}
+    components.update(ov["component"] for sc in board.scenes for ov in sc.props.get("overlays", []))
+    if components & {"rank_label", "section_card"}:
+        relative = "assets/fonts/NotoSerifCJK-Bold.ttc"
+        target = run / relative
+        if not target.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2("/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc", target)
+        font = Asset(id="font_noto_serif_cjk_jp", path=relative,
+                     kind="font", origin="library", tool="system:Noto Serif CJK JP",
+                     license="SIL Open Font License 1.1", license_url="https://openfontlicense.org/",
+                     commercial_ok=True)
+        manifest.assets = [a for a in manifest.assets if a.id != font.id] + [font]
     used_sfx = dict.fromkeys(effect_id for sc in board.scenes if sc.line_ids
                             for effect_id, _ in events(sc.props.get("sfx")))
     if used_sfx:

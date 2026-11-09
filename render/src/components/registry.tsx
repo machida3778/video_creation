@@ -1,9 +1,10 @@
 import React from 'react';
 import {AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
-import type {CharacterPairProps, Clip, CountdownProps, RankCardProps, RankScrollProps} from '../types';
+import type {CharacterPairProps, Clip, CountdownProps, RankCardProps, RankScrollProps, RankLabelProps, SectionCardProps} from '../types';
 import {CaptionLines, contentArea, FONT, LayoutContext, LookLines} from './Caption';
 import {CharacterPair} from './CharacterPair';
 import {Countdown, RankCard, RankScroll} from './Ranking';
+import {RankLabel, SectionCard} from './Montage';
 
 type P = Record<string, unknown>;
 const str = (v: unknown, d = '') => (typeof v === 'string' ? v : d);
@@ -107,7 +108,7 @@ const Placeholder: React.FC<{name: string}> = ({name}) => (
 );
 
 export const COMPONENTS = ['background', 'ken_burns_image', 'video_clip', 'title_card', 'hook_title', 'end_card', 'source_card',
-  'rank_card', 'countdown', 'rank_scroll', 'character_pair'];
+  'rank_card', 'countdown', 'rank_scroll', 'character_pair', 'rank_label', 'section_card'];
 
 export const ClipView: React.FC<{clip: Clip; frames: number}> = ({clip, frames}) => {
   const p = clip.props ?? {};
@@ -132,6 +133,10 @@ export const ClipView: React.FC<{clip: Clip; frames: number}> = ({clip, frames})
       return <RankScroll props={p as RankScrollProps} />;
     case 'character_pair':
       return <CharacterPair props={p as CharacterPairProps} />;
+    case 'rank_label':
+      return <RankLabel props={p as RankLabelProps} />;
+    case 'section_card':
+      return <SectionCard props={p as SectionCardProps} />;
     default:
       return <Placeholder name={clip.component} />;
   }

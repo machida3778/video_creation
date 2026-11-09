@@ -112,13 +112,20 @@ def stage(run: Path, name: str) -> None:
     runs.mark(run, name, "running")
     try:
         if name == "tts":
-            from .tts import Voicevox, record_voices, synthesize
-            script, engine = media.load(run, "script"), Voicevox()
-            timings = synthesize(run, script, engine=engine)
-            media.save(run, "timings", timings)
-            manifest = media.load(run, "manifest") if (run / "assets/manifest.json").is_file() else None
-            (run / "assets").mkdir(exist_ok=True)
-            media.save(run, "manifest", record_voices(manifest, script, timings, engine_version=engine.version()))
+            from .registry import timing_for_run
+            from .tts import Voicevox, music_timings, record_voices, synthesize
+            script = media.load(run, "script")
+            if timing_for_run(run) == "music":
+                if not (run / "storyboard.json").is_file():
+                    raise ValueError("music timing needs storyboard.json before vg tts; set each scene's props.sec")
+                media.save(run, "timings", music_timings(script, media.load(run, "storyboard")))
+            else:
+                engine = Voicevox()
+                timings = synthesize(run, script, engine=engine)
+                media.save(run, "timings", timings)
+                manifest = media.load(run, "manifest") if (run / "assets/manifest.json").is_file() else None
+                (run / "assets").mkdir(exist_ok=True)
+                media.save(run, "manifest", record_voices(manifest, script, timings, engine_version=engine.version()))
         elif name == "assets":
             from .assets import generate
             board = media.load(run, "storyboard")
@@ -126,10 +133,11 @@ def stage(run: Path, name: str) -> None:
             media.save(run, "manifest", generate(run, board, manifest))
             media.save(run, "storyboard", board)  # t2i scenes now carry visual.ref
         elif name == "timeline":
+            from .registry import timing_for_run
             from .timeline import build
             manifest = media.load(run, "manifest") if (run / "assets/manifest.json").is_file() else None
             media.save(run, "timeline", build(media.load(run, "script"), media.load(run, "timings"),
-                                              media.load(run, "storyboard"), manifest))
+                                              media.load(run, "storyboard"), manifest, timing=timing_for_run(run)))
         elif name == "render":
             from .render import render
             render(run)

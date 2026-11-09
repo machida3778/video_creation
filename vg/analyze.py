@@ -8,9 +8,10 @@ import re
 from statistics import median
 
 from .media import FFMPEG, load, probe, run
+from .registry import timing_for_run
 
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|inf|nan)"
-TITLE_COMPONENTS = {"title_card", "hook_title", "end_card"}
+TITLE_COMPONENTS = {"title_card", "hook_title", "end_card", "rank_label", "section_card"}
 
 
 def interval_stats(changes: list[float], duration: float) -> dict:
@@ -115,17 +116,19 @@ def display_characters(text: str) -> int:
 def analyze_run(run_dir) -> dict:
     """Count base clip boundaries; overlays and motion within an image do not reset tempo."""
     timeline, timings, script = (load(run_dir, name) for name in ("timeline", "timings", "script"))
+    timing = timing_for_run(run_dir)
     changes = {clip.start for clip in timeline.clips if clip.layer == 0}
     text_spans = [(c.start, c.end) for c in timeline.captions if c.text.strip()]
     text_spans.extend((c.start, c.end) for c in timeline.clips
-                      if c.component in TITLE_COMPONENTS and isinstance(c.props.get("text"), str)
-                      and c.props["text"].strip())
-    speech = [t for t in timings.lines if t.end > t.start]
+                      if c.component in TITLE_COMPONENTS
+                      and isinstance(c.props.get("name" if c.component == "rank_label" else "text"), str)
+                      and c.props["name" if c.component == "rank_label" else "text"].strip())
+    speech = [] if timing == "music" else [t for t in timings.lines if t.end > t.start]
     seconds = sum(t.end - t.start for t in speech)
-    characters = sum(display_characters(line.text) for line in script.lines)
+    characters = 0 if timing == "music" else sum(display_characters(line.text) for line in script.lines)
     caption_lengths = [display_characters(c.text) for c in timeline.captions]
     changes = sorted(changes)
-    return {"duration": timeline.duration, "visual_change_times": changes,
+    return {"duration": timeline.duration, "timing": timing, "visual_change_times": changes,
             "first_change_sec": next((t for t in changes if t > 0), None),
             "visual_intervals": interval_stats(changes, timeline.duration),
             "first_text_sec": min((s for s, _ in text_spans), default=None),

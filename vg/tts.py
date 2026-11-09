@@ -10,6 +10,7 @@ they provide no phrase spans.
 from __future__ import annotations
 
 import io
+import math
 import os
 import wave
 from pathlib import Path
@@ -18,12 +19,28 @@ import httpx
 
 from . import narrator
 from .registry import load_voices
-from .schemas import Asset, LineTiming, Manifest, Script, Span, Timings, VoiceSpec
+from .schemas import Asset, LineTiming, Manifest, Script, Span, Storyboard, Timings, VoiceSpec
 
 VOICEVOX_URL = os.environ.get("VOICEVOX_URL", "http://127.0.0.1:50021")
 SAMPLE_RATE = 48000
 LEAD_IN = 0.05  # speech starts at once: the first seconds decide whether viewers stay
 LINE_GAP = 0.03  # tight tempo between lines (shorts); use pause_after for a deliberate beat
+
+
+def music_timings(script: Script, board: Storyboard) -> Timings:
+    """Display slots, without synthesis: one storyboard scene per script line."""
+    ids = [lid for scene in board.scenes for lid in scene.line_ids]
+    if any(len(scene.line_ids) != 1 for scene in board.scenes) or ids != [line.id for line in script.lines]:
+        raise ValueError("music storyboard must cover every script line exactly once, in order, one per scene")
+    cursor, lines = 0.0, []
+    for scene in board.scenes:
+        sec = scene.props.get("sec")
+        if isinstance(sec, bool) or not isinstance(sec, (int, float)) or not math.isfinite(sec) or sec <= 0:
+            raise ValueError(f"scene {scene.id}: music timing requires finite positive props.sec")
+        lines.append(LineTiming(line_id=scene.line_ids[0], audio="", start=round(cursor, 6),
+                                end=round(cursor + sec, 6)))
+        cursor += sec
+    return Timings(sample_rate=SAMPLE_RATE, total_sec=round(cursor, 6), lines=lines)
 
 
 class Voicevox:

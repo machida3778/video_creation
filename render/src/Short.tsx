@@ -1,11 +1,45 @@
 import React from 'react';
-import {AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, interpolate, Sequence, useCurrentFrame, useVideoConfig} from 'remotion';
 import {CaptionView, FONT, LayoutContext} from './components/Caption';
 import {ClipView} from './components/registry';
+import {Sparks} from './components/Montage';
 import type {Clip, Layout, ShortProps, TextBand} from './types';
 
 // Base-layer components that show the scene's picture; a format's media frame places them.
 const MEDIA = new Set(['ken_burns_image', 'video_clip']);
+
+// Only base media is wrapped: labels and existing components retain their own animation.
+const MontageMedia: React.FC<{clip: Clip; children: React.ReactNode}> = ({clip, children}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const p = clip.props;
+  const top = ['top5', 'top3', 'top1'].includes(String(p.tier));
+  const mirror = p.transition === 'mirror' && frame < fps * 0.3;
+  const shift = mirror ? interpolate(frame, [0, fps * 0.3], [680, 0]) : 0;
+  const split = p.tier === 'top1' ? 5 : 3;
+  const picture = <>
+    {children}
+    {top && <>
+      <AbsoluteFill style={{transform: `translateX(-${split}px)`, mixBlendMode: 'screen', opacity: 0.23,
+        filter: 'url(#montage-red)'}}>{children}</AbsoluteFill>
+      <AbsoluteFill style={{transform: `translateX(${split}px)`, mixBlendMode: 'screen', opacity: 0.23,
+        filter: 'url(#montage-blue)'}}>{children}</AbsoluteFill>
+    </>}
+  </>;
+  return <AbsoluteFill style={{overflow: 'hidden'}}>
+    {top && <svg width="0" height="0" style={{position: 'absolute'}} aria-hidden="true"><defs>
+      <filter id="montage-red" colorInterpolationFilters="sRGB"><feColorMatrix type="matrix"
+        values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" /></filter>
+      <filter id="montage-blue" colorInterpolationFilters="sRGB"><feColorMatrix type="matrix"
+        values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" /></filter>
+    </defs></svg>}
+    {mirror ? [-1, 0, 1].map(tile => <AbsoluteFill key={tile}
+      style={{transform: `translateX(${tile * 1080 + shift}px) scaleX(${tile === 0 ? 1 : -1})`}}>
+      {picture}
+    </AbsoluteFill>) : picture}
+    {top && Number(p.rank) <= 3 && <Sparks rank={Number(p.rank)} color={typeof p.color === 'string' ? p.color : undefined} />}
+  </AbsoluteFill>;
+};
 
 const splitEmphasis = (line: string, words: string[]) => {
   const out: [string, boolean][] = [];
@@ -83,7 +117,11 @@ export const Short: React.FC<ShortProps> = ({timeline}) => {
   const clips = [...timeline.clips].sort((a, b) => a.layer - b.layer);
   const layout = timeline.layout ?? null;
   const view = (clip: Clip) => {
-    const inner = <ClipView clip={clip} frames={span(clip.start, clip.end)} />;
+    let inner = <ClipView clip={clip} frames={span(clip.start, clip.end)} />;
+    if (clip.layer === 0 && MEDIA.has(clip.component) && (clip.props.transition === 'mirror'
+      || ['top5', 'top3', 'top1'].includes(String(clip.props.tier)))) {
+      inner = <MontageMedia clip={clip}>{inner}</MontageMedia>;
+    }
     return layout && clip.layer === 0 && MEDIA.has(clip.component) ? <Framed layout={layout}>{inner}</Framed> : inner;
   };
 

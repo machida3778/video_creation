@@ -11,7 +11,7 @@ layout's header band.
 from __future__ import annotations
 
 from .captions import band_text, captions_for_line
-from .registry import load_style
+from .registry import load_style, load_types
 from .sfx import asset_id, events
 from .schemas import (AudioClip, Caption, Clip, Layout, Line, LineTiming, Manifest, Script, Storyboard, Timeline,
                       Timings)
@@ -64,12 +64,16 @@ def resolve_layout(board: Storyboard, layout: Layout | None = None) -> Layout | 
 
 
 def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifest | None = None,
-          fps: int = 30, layout: Layout | None = None) -> Timeline:
+          fps: int = 30, layout: Layout | None = None, *, timing: str | None = None) -> Timeline:
+    if timing is None:
+        spec = load_types().get(board.type_id)
+        timing = spec.timing if spec else "narration"
+    music = timing == "music"
     layout = resolve_layout(board, layout)
     by_line = {t.line_id: t for t in timings.lines}
     lines = {line.id: line for line in script.lines}
     assets = {a.id: a.path for a in (manifest.assets if manifest else [])}
-    duration = round(timings.total_sec + TAIL, 3)
+    duration = round(timings.total_sec + (0 if music else TAIL), 6 if music else 3)
     roles = list(dict.fromkeys(line.speaker for line in script.lines))
     role_style = {r: ("speaker_a", "speaker_b")[i] for i, r in enumerate(roles[:2])} if len(roles) > 1 else {}
 
@@ -88,6 +92,13 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
     for i, sc in enumerate(scenes):
         start, end = starts[i], (starts[i + 1] if i + 1 < len(starts) else duration)
         props = {k: v for k, v in sc.props.items() if k not in ("overlays", "captions", "sfx")}
+        if sc.transition is not None:
+            props["transition"] = sc.transition
+        # The label supplies the picture's escalation, without duplicating it in scene props.
+        label = next((ov.get("props", {}) for ov in sc.props.get("overlays", [])
+                      if ov["component"] == "rank_label"), None)
+        if music and label is not None:
+            props.update({k: label[k] for k in ("rank", "tier", "color") if k in label})
         for effect_id, offset in events(sc.props.get("sfx")):
             key = asset_id(effect_id)
             if key not in assets or not any(a.id == key and a.kind == "sfx" for a in manifest.assets):
@@ -110,13 +121,13 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
         for clip in scene_clips:
             if clip.component == "character_pair":
                 scene_role_style.update({role: f"speaker_{speaker}" for speaker, role in clip.props["roles"].items()})
-        if sc.props.get("captions", True):
+        if not music and sc.props.get("captions", True):
             for lid in sc.line_ids:
                 line = lines[lid]
                 style = sc.caption_style or scene_role_style.get(line.speaker, "default")
                 captions.extend(captions_for_line(line, by_line[lid], style, layout))
 
-    audio = [AudioClip(start=t.start, src=t.audio, kind="voice") for t in timings.lines] + effects
+    audio = ([] if music else [AudioClip(start=t.start, src=t.audio, kind="voice") for t in timings.lines]) + effects
     if board.music and board.music.asset:
         if board.music.asset not in assets:
             raise ValueError(f"music asset '{board.music.asset}' not in manifest")

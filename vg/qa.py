@@ -81,14 +81,16 @@ def check_loudness(run_dir) -> Check:
 def check_mix(run_dir, style=None) -> Check:
     """Validate measured source levels plus applied gains against the voice reference."""
     style = registry.load_style() if style is None else style
-    audio = [a for a in load(run_dir, "timeline").audio if a.kind != "voice"]
+    timeline = load(run_dir, "timeline")
+    audio = [a for a in timeline.audio if a.kind != "voice"]
+    music_only = registry.timing_for_run(run_dir) == "music" and not any(a.kind == "voice" for a in timeline.audio)
     path = Path(run_dir) / "render" / "mix.json"
     passed, detail = True, "no music or SFX"
     if audio:
         try:
             report = json.loads(path.read_text(encoding="utf-8"))
-            voice = report["voice"]["level_db"]
-            if not isinstance(voice, (int, float)) or not math.isfinite(voice):
+            voice = None if music_only else report["voice"]["level_db"]
+            if not music_only and (not isinstance(voice, (int, float)) or not math.isfinite(voice)):
                 raise ValueError("voice level unavailable")
             entries = report["clips"]
             if len(entries) != len(audio):
@@ -101,6 +103,10 @@ def check_mix(run_dir, style=None) -> Check:
                 level = entry["level_db"]
                 if not isinstance(level, (int, float)) or not math.isfinite(level):
                     raise ValueError(f"{clip.kind} level unavailable")
+                if music_only:
+                    passed &= math.isfinite(clip.gain_db) and (clip.kind != "music" or not clip.duck_under_voice)
+                    details.append(f"{clip.kind} {clip.src}: {level + clip.gain_db:.2f} dB; no narration")
+                    continue
                 offset = voice - (level + clip.gain_db)
                 target = style["bgm_below_voice_db" if clip.kind == "music" else "sfx_below_voice_db"]
                 tolerance = 2 if clip.kind == "music" else 3
@@ -199,10 +205,11 @@ def check_caption_timing(timeline, duration=None) -> Check:
 
 def check_hook(metrics, style) -> Check:
     text, speech = metrics["first_text_sec"], metrics["first_speech_sec"]
-    return Check(id="hook", passed=text is not None and speech is not None
-                 and 0 <= text <= style["first_text_max_sec"] and 0 <= speech <= style["first_speech_max_sec"],
+    music = metrics.get("timing") == "music"
+    return Check(id="hook", passed=text is not None and 0 <= text <= style["first_text_max_sec"]
+                 and (music or (speech is not None and 0 <= speech <= style["first_speech_max_sec"])),
                  redo_stage="storyboard", detail=f"first text={text}s (max {style['first_text_max_sec']:g}s); "
-                 f"first speech={speech}s (max {style['first_speech_max_sec']:g}s)")
+                 + ("no narration" if music else f"first speech={speech}s (max {style['first_speech_max_sec']:g}s)"))
 
 
 def check_tempo(run_dir, metrics, style) -> Check:
@@ -222,6 +229,8 @@ def check_tempo(run_dir, metrics, style) -> Check:
 
 
 def check_speech_rate(metrics, style) -> Check:
+    if metrics.get("timing") == "music":
+        return Check(id="speech_rate", passed=True, severity="warn", redo_stage="tts", detail="no narration")
     rate = metrics["speech_cps"]
     return Check(id="speech_rate", passed=rate >= style["min_speech_cps"], severity="warn", redo_stage="tts",
                  detail=f"display characters={metrics['speech_characters']}, speech={metrics['speech_seconds']:.3f}s; "
@@ -289,6 +298,8 @@ def check_metadata(run_dir) -> Check:
 
 
 def check_yomi(run_dir) -> Check:
+    if registry.timing_for_run(run_dir) == "music":
+        return Check(id="yomi", passed=True, redo_stage="script", detail="no narration")
     run_dir = Path(run_dir)
     path, script = run_dir / "yomi_check.json", run_dir / "script.json"
     passed = False

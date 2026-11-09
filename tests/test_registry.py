@@ -13,7 +13,7 @@ from vg.registry import cast_for_type, load_types, load_voice_defaults, load_voi
 
 ROOT = Path(__file__).resolve().parents[1]
 TYPE_IDS = {
-    "trivia_explainer", "news_digest", "ranking", "book_intro", "history_story",
+    "trivia_explainer", "news_digest", "ranking", "ranking_montage", "book_intro", "history_story",
     "horror_story", "dialogue_explainer", "chat_story", "data_comparison",
     "map_explainer", "quiz", "english_lesson", "ai_cinematic", "what_if",
     "ai_microdrama", "surreal_asmr", "streamer_highlight",
@@ -23,7 +23,7 @@ COMPONENTS = {
     "timeline", "quote_card", "rank_card", "rank_scroll", "countdown",
     "chart_bar", "chart_line", "chart_race", "map_view", "quiz_timer",
     "choice_cards", "answer_reveal", "chat_bubbles", "character_pair",
-    "book_card", "end_card", "bgm", "sfx",
+    "book_card", "end_card", "bgm", "sfx", "rank_label", "section_card",
 }
 MODEL_KEYS = {
     "tts", "t2i", "image_edit", "i2v", "t2v", "s2v", "music", "foley",
@@ -44,7 +44,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_type_ids(self):
         self.assertEqual(set(self.types), TYPE_IDS)
-        self.assertEqual(len(list((ROOT / "types").glob("*/type.yaml"))), 17)
+        self.assertEqual(len(list((ROOT / "types").glob("*/type.yaml"))), 18)
         for spec in self.types.values():
             with self.subTest(type_id=spec.id):
                 self.assertIn(spec.status, ("planned", "experimental", "stable"))
@@ -81,7 +81,8 @@ class RegistryTests(unittest.TestCase):
     def test_recipe_quality_requirements(self):
         for spec in self.types.values():
             with self.subTest(type_id=spec.id):
-                self.assertEqual(set(spec.length), {"youtube_shorts", "tiktok", "x"})
+                self.assertEqual(set(spec.length), {"youtube_shorts"} if spec.id == "ranking_montage"
+                                 else {"youtube_shorts", "tiktok", "x"})
                 for length in spec.length.values():
                     self.assertLessEqual(length.min, length.target)
                     self.assertLessEqual(length.target, length.max)

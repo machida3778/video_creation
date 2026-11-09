@@ -10,6 +10,8 @@ export type Clip = {
 };
 
 export type RankCardProps = {rank: number; label: string; value?: string; bar?: number; color?: string};
+export type RankLabelProps = {rank: number; name: string; tier?: 'normal' | 'top5' | 'top3' | 'top1'; color?: string};
+export type SectionCardProps = {text: string; color?: string};
 export type CountdownProps = {from: number; to: number};
 export type RankScrollProps = {
   items: {rank: number; label: string; src?: string}[];
