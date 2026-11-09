@@ -12,7 +12,7 @@ from .schemas import Publish
 from . import registry, run as runs
 from .variants import metadata
 from .disclosure import needs_disclosure
-from .qa import check_metadata, write_report
+from .qa import check_metadata, check_source_rights, write_report
 
 
 def _hashtags(brief, script, type_name: str) -> list[str]:
@@ -110,6 +110,12 @@ def package(run_dir) -> Path:
     run_dir = Path(run_dir)
     if not (run_dir / "qa.json").is_file():
         raise ValueError("Packaging requires qa.json")
+    # Recheck source licences even if the manifest changed after QA.
+    rights = check_source_rights(run_dir)
+    if rights:
+        write_report(run_dir, rights)
+        if any(not c.passed and c.severity == "block" for c in rights):
+            raise ValueError("Packaging requires passed source rights QA (see qa.json)")
     if any(not c.passed and c.severity == "block" and c.id != "metadata" and not c.id.startswith("en_")
            for c in load(run_dir, "qa").checks):
         raise ValueError("Packaging requires a passed QA report")

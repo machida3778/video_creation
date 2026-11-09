@@ -16,18 +16,18 @@ TYPE_IDS = {
     "trivia_explainer", "news_digest", "ranking", "ranking_montage", "book_intro", "history_story",
     "horror_story", "dialogue_explainer", "chat_story", "data_comparison",
     "map_explainer", "quiz", "english_lesson", "ai_cinematic", "what_if",
-    "ai_microdrama", "surreal_asmr", "streamer_highlight",
+    "ai_microdrama", "surreal_asmr", "streamer_highlight", "clip_highlight", "english_drill",
 }
 COMPONENTS = {
     "hook_title", "caption", "ken_burns_image", "video_clip", "source_card",
     "timeline", "quote_card", "rank_card", "rank_scroll", "countdown",
     "chart_bar", "chart_line", "chart_race", "map_view", "quiz_timer",
     "choice_cards", "answer_reveal", "chat_bubbles", "character_pair",
-    "book_card", "end_card", "bgm", "sfx", "rank_label", "section_card",
+    "book_card", "end_card", "bgm", "sfx", "rank_label", "section_card", "countdown_ring",
 }
 MODEL_KEYS = {
     "tts", "t2i", "image_edit", "i2v", "t2v", "s2v", "music", "foley",
-    "asr", "vlm", "upscale",
+    "asr", "vlm", "upscale", "tts_en",
 }
 QA_KEYS = {
     "duration", "loudness", "safe_area", "yomi", "facts", "originality",
@@ -44,7 +44,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_type_ids(self):
         self.assertEqual(set(self.types), TYPE_IDS)
-        self.assertEqual(len(list((ROOT / "types").glob("*/type.yaml"))), 18)
+        self.assertEqual(len(list((ROOT / "types").glob("*/type.yaml"))), 20)
         for spec in self.types.values():
             with self.subTest(type_id=spec.id):
                 self.assertIn(spec.status, ("planned", "experimental", "stable"))
@@ -81,7 +81,8 @@ class RegistryTests(unittest.TestCase):
     def test_recipe_quality_requirements(self):
         for spec in self.types.values():
             with self.subTest(type_id=spec.id):
-                self.assertEqual(set(spec.length), {"youtube_shorts"} if spec.id == "ranking_montage"
+                self.assertEqual(set(spec.length), {"youtube_shorts"} if spec.id in {
+                    "ranking_montage", "clip_highlight", "english_drill"}
                                  else {"youtube_shorts", "tiktok", "x"})
                 for length in spec.length.values():
                     self.assertLessEqual(length.min, length.target)

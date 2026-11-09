@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
 OUTBOX = ROOT / "outbox"
 # Order of a production. LLM stages (Claude) write brief…storyboard specs; vg runs tts, timeline … package.
-STAGES = ["brief", "route", "research", "script", "factcheck", "tts", "storyboard", "assets", "timeline",
+STAGES = ["brief", "route", "research", "script", "factcheck", "tts", "clips", "storyboard", "assets", "timeline",
           "render", "qa", "package"]
 
 

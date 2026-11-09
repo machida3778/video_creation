@@ -1,0 +1,19 @@
+id: clip_highlight
+name: 元動画のハイライト切り抜き
+version: 1
+status: experimental
+priority: P1
+description: 許諾済みの配信・スポーツ映像から見どころを切り出し、元音声と編集字幕で見せる。
+use_when: [配信の面白い場面, スポーツのプレー切り抜き]
+avoid_when: [商用切り抜きの許可がない映像, メンバー限定や有料配信]
+pipeline: clipping
+timing: source
+length:
+  youtube_shorts: {target: 45, min: 20, max: 59}
+voice: {}
+rights: {required_evidence: [clip_guideline_url, source_url]}
+components: [video_clip]
+params: {crop: fill, focus_x: 0.5}
+qa: [duration, loudness, safe_area, originality, rights]
+risks: [文脈を損なう編集, 元動画や放送映像の権利]
+monetization: 公開された商用切り抜き規約に従い、独自の選定・ジャンプカット・字幕で構成する。

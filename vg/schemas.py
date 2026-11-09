@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Literal
 import warnings
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 SCHEMA_VERSION = 0
 Platform = Literal["youtube_shorts", "tiktok", "x"]
@@ -85,6 +85,8 @@ class Line(BaseModel):
     emphasis: list[str] = []        # words to highlight in the subtitle
     fact_ids: list[str] = []        # every factual claim cites Research.facts
     pause_after: float = 0.0
+    start: float | None = Field(None, ge=0, allow_inf_nan=False)  # source caption, output clock
+    end: float | None = Field(None, ge=0, allow_inf_nan=False)
 
 
 class Script(Spec):
@@ -168,6 +170,47 @@ class Timings(Spec):
     lines: list[LineTiming]
 
 
+class ClipSegment(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,48}$")
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+    crop: Literal["fill", "fit"] | None = None
+    focus_x: float | None = Field(None, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def _duration(self):
+        if self.end - self.start < 0.6 - 1e-9:
+            raise ValueError("each segment must last at least 0.6 seconds (end > start)")
+        return self
+
+
+class ClipPlan(Spec):
+    source: str
+    license_id: str = Field(min_length=1)
+    guideline: str | None = None
+    segments: list[ClipSegment] = Field(min_length=1)  # output order, not source order
+
+    @field_validator("source", "guideline")
+    @classmethod
+    def _url(cls, value):
+        if value is not None:
+            HttpUrl(value)
+        return value
+
+    @property
+    def total_sec(self) -> float:
+        return round(sum(s.end - s.start for s in self.segments), 6)
+
+    @model_validator(mode="after")
+    def _segments(self):
+        if len({s.id for s in self.segments}) != len(self.segments):
+            raise ValueError("duplicate segment ids")
+        if self.total_sec > 59:
+            raise ValueError("clip total must be <= 59 seconds")
+        return self
+
+
 # ---------------------------------------------------------------- storyboard
 class Visual(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -200,10 +243,16 @@ class Music(BaseModel):
 
 class Storyboard(Spec):
     type_id: str
-    scenes: list[Scene] = Field(min_length=1)
+    scenes: list[Scene] = []
     music: Music | None = None
     format: str | None = None       # format id (route.format); its layout is applied by vg timeline
     header: str | None = None       # text of the format's fixed header band, e.g. the video's question
+
+    @model_validator(mode="after")
+    def _scenes(self):
+        if not self.scenes and self.type_id != "clip_highlight":
+            raise ValueError("storyboard requires scenes")
+        return self
 
 
 def visible_chars(text: str) -> int:
@@ -588,9 +637,10 @@ class TypeSpec(BaseModel):
     avoid_when: list[str] = []
     pipeline: Literal["narration_stills", "narration_video", "dialogue", "music_motion", "data_animation",
                       "generated_video", "clipping"]
-    timing: Literal["narration", "music", "fixed"]
+    timing: Literal["narration", "music", "fixed", "source"]
     length: dict[Platform, Length]
     research: dict[str, Any] = {"required": False}
+    rights: dict[str, Any] = {}
     # role -> voice ids in order of preference ("default" = config/voices.yaml defaults.<role>, or
     # defaults.narrator); the first active voice whose terms allow the type's `content` is used.
     voice: dict[str, list[str]] = {"narrator": ["default"]}
@@ -691,5 +741,5 @@ class VoiceSpec(BaseModel):
 STAGE_MODELS = {
     "brief": Brief, "route": Route, "research": Research, "script": Script, "factcheck": FactCheck,
     "timings": Timings, "storyboard": Storyboard, "manifest": Manifest, "timeline": Timeline,
-    "qa": QAReport, "publish": Publish, "covers": Covers, "en": English,
+    "qa": QAReport, "publish": Publish, "covers": Covers, "en": English, "clips": ClipPlan,
 }

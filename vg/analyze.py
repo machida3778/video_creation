@@ -125,6 +125,9 @@ def analyze_run(run_dir) -> dict:
                       and c.props["name" if c.component == "rank_label" else "text"].strip())
     speech = [] if timing == "music" else [t for t in timings.lines if t.end > t.start]
     seconds = sum(t.end - t.start for t in speech)
+    first_speech = min((t.start for t in speech), default=None)
+    if timing == "source":
+        first_speech = min((a.start for a in timeline.audio if a.kind == "voice"), default=None)
     characters = 0 if timing == "music" else sum(display_characters(line.text) for line in script.lines)
     caption_lengths = [display_characters(c.text) for c in timeline.captions]
     changes = sorted(changes)
@@ -132,7 +135,7 @@ def analyze_run(run_dir) -> dict:
             "first_change_sec": next((t for t in changes if t > 0), None),
             "visual_intervals": interval_stats(changes, timeline.duration),
             "first_text_sec": min((s for s, _ in text_spans), default=None),
-            "first_speech_sec": min((t.start for t in speech), default=None),
+            "first_speech_sec": first_speech,
             "caption_coverage": covered_seconds(text_spans, timeline.duration) / timeline.duration,
             "speech_characters": characters, "speech_seconds": seconds,
             "speech_cps": characters / seconds if seconds else 0.0,

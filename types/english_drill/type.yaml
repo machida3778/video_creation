@@ -1,0 +1,21 @@
+id: english_drill
+name: 瞬間英作文ドリル
+version: 1
+status: experimental
+priority: P1
+description: 日本語の問い、3秒の思考時間、英語の答えを教室のオリジナルキャラクターと見せる。
+use_when: [瞬間英作文, 短い英会話ドリル]
+avoid_when: [長文の翻訳, 既存教材の転載]
+pipeline: narration_stills
+timing: narration
+length:
+  youtube_shorts: {target: 55, min: 30, max: 59}
+voice:
+  narrator: [vv_himari, default]
+  english: [kokoro_heart, kokoro_michael]
+components: [ken_burns_image, countdown_ring]
+models: [t2i, tts, tts_en]
+params: {items: 7, think_sec: 3}
+qa: [duration, loudness, safe_area, yomi, originality, rights]
+risks: [不自然な英訳, 教材やキャラクターの模倣]
+monetization: 独自の短文例題と解説用キャラクターで学習体験を構成する。

@@ -10,6 +10,7 @@ they provide no phrase spans.
 from __future__ import annotations
 
 import io
+import hashlib
 import math
 import os
 import wave
@@ -18,6 +19,7 @@ from pathlib import Path
 import httpx
 
 from . import narrator
+from . import media
 from .registry import load_voices
 from .schemas import Asset, LineTiming, Manifest, Script, Span, Storyboard, Timings, VoiceSpec
 
@@ -102,17 +104,21 @@ def synthesize(run: Path, script: Script, voices: dict[str, VoiceSpec] | None = 
     effective = {role: voices[script.cast[role]].model_copy(update=script.voice_overrides.get(role, {}))
                  for role in dict.fromkeys(line.speaker for line in script.lines)}
     for voice in effective.values():
-        if voice.engine not in ("voicevox", "irodori"):
+        if voice.engine not in ("voicevox", "irodori", "kokoro"):
             raise NotImplementedError(f"engine {voice.engine} ({voice.id}) is not wired yet")
+    for line in script.lines:
+        if Path(line.id).name != line.id or line.id in ("", ".", ".."):
+            raise ValueError(f"invalid audio line id: {line.id!r}")
     narrator_lines = [line for line in script.lines if effective[line.speaker].engine == "irodori"]
     narrated = narrator.synthesize(run, narrator_lines, effective) if narrator_lines else {}
     (run / "audio").mkdir(exist_ok=True)
+    kokoro = _kokoro_lines(run, script, effective)
     cursor, lines = LEAD_IN, []
     for line in script.lines:
         voice = effective[line.speaker]
         rel = f"audio/{line.id}.wav"
-        if voice.engine == "irodori":
-            data = Path(narrated[line.id]).read_bytes()
+        if voice.engine in ("irodori", "kokoro"):
+            data = Path((kokoro if voice.engine == "kokoro" else narrated)[line.id]).read_bytes()
             spans, predicted = [], 0.0
         else:
             engine = engine or Voicevox()
@@ -131,6 +137,33 @@ def synthesize(run: Path, script: Script, voices: dict[str, VoiceSpec] | None = 
     return Timings(sample_rate=SAMPLE_RATE, total_sec=round(cursor, 3), lines=lines)
 
 
+def _kokoro_lines(run: Path, script: Script, effective: dict[str, VoiceSpec]) -> dict[str, Path]:
+    """Use the existing offline batch worker, with content-addressed raw WAVs for safe retries."""
+    from . import english
+    jobs, outputs, raw = [], {}, {}
+    for line in script.lines:
+        voice = effective[line.speaker]
+        if voice.engine != "kokoro":
+            continue
+        if (voice.lang != "en" or voice.status != "active" or not voice.commercial_ok
+                or voice.model not in (None, english.CHECKPOINT) or voice.speaker not in ("af_heart", "am_michael")
+                or not math.isfinite(voice.speed) or voice.speed <= 0):
+            raise ValueError(f"{voice.id}: requires an active commercial English Kokoro voice and positive speed")
+        text = line.yomi or line.text
+        token = hashlib.sha256((voice.model_dump_json() + text).encode()).hexdigest()[:24]
+        path = (run / "audio" / f"kokoro_{token}.wav").resolve()
+        raw[line.id] = path
+        outputs[line.id] = run / "audio" / f"{line.id}.wav"
+        if not path.is_file() and not any(j["output"] == str(path) for j in jobs):
+            jobs.append({"text": text, "voice": voice.speaker, "speed": voice.speed, "output": str(path)})
+    if jobs:
+        english.synthesize(jobs)
+    for lid, path in raw.items():
+        media.run([str(media.FFMPEG), "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", str(path),
+                   "-ar", str(SAMPLE_RATE), "-ac", "1", "-c:a", "pcm_s16le", str(outputs[lid])])
+    return outputs
+
+
 def record_voices(manifest: Manifest | None, script: Script, timings: Timings,
                   voices: dict[str, VoiceSpec] | None = None, engine_version: str = "") -> Manifest:
     """Replace the manifest's voice assets with one per synthesized line (licence + required credit)."""
@@ -143,6 +176,7 @@ def record_voices(manifest: Manifest | None, script: Script, timings: Timings,
         if script.voice_overrides.get(speaker[t.line_id]):
             v = v.model_copy(update=script.voice_overrides[speaker[t.line_id]])
         tool = (f"irodori:{v.model or narrator.CHECKPOINT}" if v.engine == "irodori" else
+                f"kokoro:{v.model or 'hexgrad/Kokoro-82M'}" if v.engine == "kokoro" else
                 f"{v.engine}{':' + engine_version if engine_version else ''}:{v.speaker or v.model}")
         keep.append(Asset(id=f"voice_{t.line_id}", path=t.audio, kind="voice", origin="generated",
                           tool=tool,

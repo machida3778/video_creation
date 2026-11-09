@@ -5,6 +5,7 @@ import {CaptionLines, contentArea, FONT, LayoutContext, LookLines} from './Capti
 import {CharacterPair} from './CharacterPair';
 import {Countdown, RankCard, RankScroll} from './Ranking';
 import {RankLabel, SectionCard} from './Montage';
+import {CountdownRing} from './CountdownRing';
 
 type P = Record<string, unknown>;
 const str = (v: unknown, d = '') => (typeof v === 'string' ? v : d);
@@ -50,7 +51,8 @@ const VideoClip: React.FC<{props: P}> = ({props}) => (
     <OffthreadVideo
       src={staticFile(str(props.src))}
       muted={props.muted !== false}
-      style={{width: '100%', height: '100%', objectFit: 'cover'}}
+      style={{width: '100%', height: '100%', objectFit: props.crop === 'fit' ? 'contain' : 'cover',
+        objectPosition: `${Math.min(1, Math.max(0, num(props.focus_x, 0.5))) * 100}% 50%`}}
     />
   </AbsoluteFill>
 );
@@ -108,7 +110,7 @@ const Placeholder: React.FC<{name: string}> = ({name}) => (
 );
 
 export const COMPONENTS = ['background', 'ken_burns_image', 'video_clip', 'title_card', 'hook_title', 'end_card', 'source_card',
-  'rank_card', 'countdown', 'rank_scroll', 'character_pair', 'rank_label', 'section_card'];
+  'rank_card', 'countdown', 'rank_scroll', 'character_pair', 'rank_label', 'section_card', 'countdown_ring'];
 
 export const ClipView: React.FC<{clip: Clip; frames: number}> = ({clip, frames}) => {
   const p = clip.props ?? {};
@@ -129,6 +131,8 @@ export const ClipView: React.FC<{clip: Clip; frames: number}> = ({clip, frames})
       return <RankCard props={p as RankCardProps} />;
     case 'countdown':
       return <Countdown props={p as CountdownProps} />;
+    case 'countdown_ring':
+      return <CountdownRing seconds={num(p.seconds, 3)} start={num(p.start, 0)} />;
     case 'rank_scroll':
       return <RankScroll props={p as RankScrollProps} />;
     case 'character_pair':

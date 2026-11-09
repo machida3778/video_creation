@@ -73,7 +73,8 @@ def cmd_cast(run: Path) -> int:
     brief, route = media.load(run, "brief"), media.load(run, "route")
     spec = load_types()[route.type_id]
     voices, defaults = load_voices(), load_voice_defaults()
-    requested = {role: (vr.voice_id or resolve_voice(vr.raw, voices, role)) for role, vr in brief.cast.items()}
+    requested = {role: (vr.voice_id or resolve_voice(vr.raw, voices, role, lang="en" if role == "english" else "ja"))
+                 for role, vr in brief.cast.items()}
     if "narrator" in spec.voice and "narrator" not in requested:
         requested["narrator"] = brief.voice.voice_id or resolve_voice(brief.voice.raw, voices)
     cast = cast_for_type(spec, voices, defaults, requested)
@@ -111,33 +112,53 @@ def stage(run: Path, name: str) -> None:
     media = _media()
     runs.mark(run, name, "running")
     try:
-        if name == "tts":
+        if name == "clips":
+            from .clips import prepare
+            prepare(run)
+        elif name == "tts":
             from .registry import timing_for_run
             from .tts import Voicevox, music_timings, record_voices, synthesize
             script = media.load(run, "script")
-            if timing_for_run(run) == "music":
+            timing = timing_for_run(run)
+            if timing == "source":
+                raise ValueError("source timing uses vg clips instead of vg tts")
+            if timing == "music":
                 if not (run / "storyboard.json").is_file():
                     raise ValueError("music timing needs storyboard.json before vg tts; set each scene's props.sec")
                 media.save(run, "timings", music_timings(script, media.load(run, "storyboard")))
             else:
-                engine = Voicevox()
-                timings = synthesize(run, script, engine=engine)
+                from .registry import load_voices
+                voices = load_voices()
+                engine = Voicevox() if any(voices[script.cast[l.speaker]].engine == "voicevox"
+                                           for l in script.lines) else None
+                timings = synthesize(run, script, voices=voices, engine=engine)
                 media.save(run, "timings", timings)
                 manifest = media.load(run, "manifest") if (run / "assets/manifest.json").is_file() else None
                 (run / "assets").mkdir(exist_ok=True)
-                media.save(run, "manifest", record_voices(manifest, script, timings, engine_version=engine.version()))
+                media.save(run, "manifest", record_voices(manifest, script, timings, voices=voices,
+                                                          engine_version=engine.version() if engine else ""))
         elif name == "assets":
             from .assets import generate
-            board = media.load(run, "storyboard")
+            from .registry import timing_for_run
+            from .schemas import Storyboard
+            board = (media.load(run, "storyboard") if (run / "storyboard.json").is_file() else
+                     Storyboard(type_id="clip_highlight") if timing_for_run(run) == "source" else
+                     media.load(run, "storyboard"))
             manifest = media.load(run, "manifest") if (run / "assets/manifest.json").is_file() else None
             media.save(run, "manifest", generate(run, board, manifest))
             media.save(run, "storyboard", board)  # t2i scenes now carry visual.ref
         elif name == "timeline":
-            from .registry import timing_for_run
+            from .registry import load_types, timing_for_run
             from .timeline import build
             manifest = media.load(run, "manifest") if (run / "assets/manifest.json").is_file() else None
+            timing = timing_for_run(run)
+            route = media.load(run, "route") if (run / "route.json").is_file() else None
+            params = {**(load_types()[route.type_id].params if route else {}), **(route.params if route else {})}
+            board = media.load(run, "storyboard") if (run / "storyboard.json").is_file() else None
             media.save(run, "timeline", build(media.load(run, "script"), media.load(run, "timings"),
-                                              media.load(run, "storyboard"), manifest, timing=timing_for_run(run)))
+                                              board, manifest, timing=timing,
+                                              clip_plan=media.load(run, "clips") if timing == "source" else None,
+                                              params=params))
         elif name == "render":
             from .render import render
             render(run)
@@ -300,14 +321,14 @@ def main(argv: list[str] | None = None) -> int:
     en = sub.add_parser("en", help="English localisation; parent RUN batches all variants with en.json")
     en.add_argument("run")
     en.add_argument("--cpu", action="store_true", help="run Kokoro on CPU on the selected lab GPU host")
-    for name in ["validate", "cast", "status", "sheet", *PIPELINE]:
+    for name in ["validate", "cast", "status", "sheet", "clips", *PIPELINE]:
         parser = sub.add_parser(name)
         parser.add_argument("run")
         if name == "assets":
             parser.add_argument("--all", action="store_true", help="batch all variants in one GPU job")
     make = sub.add_parser("make")
     make.add_argument("run")
-    make.add_argument("--from", dest="start", choices=PIPELINE, default=PIPELINE[0])
+    make.add_argument("--from", dest="start", choices=["clips", *PIPELINE], default=PIPELINE[0])
     variant = sub.add_parser("variant").add_subparsers(dest="variant_cmd", required=True)
     variant_new = variant.add_parser("new")
     variant_new.add_argument("run")
@@ -587,7 +608,10 @@ def main(argv: list[str] | None = None) -> int:
     if a.cmd == "sheet":
         return cmd_sheet(run)
     if a.cmd == "make":
-        for name in PIPELINE[PIPELINE.index(a.start):]:
+        from .registry import timing_for_run
+        pipeline = ["clips", *PIPELINE[1:]] if timing_for_run(run) == "source" else PIPELINE
+        start = "clips" if pipeline[0] == "clips" and a.start == "tts" else a.start
+        for name in pipeline[pipeline.index(start):]:
             stage(run, name)
         return 0
     if a.cmd == "assets" and a.all:

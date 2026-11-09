@@ -99,11 +99,12 @@ def cast_for_type(spec: TypeSpec, voices: dict[str, VoiceSpec], defaults: dict[s
     requested = requested or {}
     cast = {}
     for role, prefs in spec.voice.items():
+        lang = "en" if role == "english" else "ja"
         chain = [requested.get(role)] + [defaults.get(role, defaults.get("narrator")) if p == "default" else p
                                          for p in prefs]
         for voice_id in chain:
             voice = voices.get(voice_id) if voice_id else None
-            if voice and voice.lang == "ja" and voice.status == "active" and not set(voice.restricted_content) & set(spec.content):
+            if voice and voice.lang == lang and voice.status == "active" and not set(voice.restricted_content) & set(spec.content):
                 cast[role] = voice_id
                 break
         else:

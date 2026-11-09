@@ -223,8 +223,11 @@ def check_tempo(run_dir, metrics, style) -> Check:
     except (RuntimeError, ValueError, OSError) as exc:
         # Pixel detection is supplementary and cannot change a specification-based decision.
         secondary = f"scene detection unavailable ({type(exc).__name__})"
+    # A source clip holds on a talking person for as long as the moment lasts; warn instead of blocking.
+    source = metrics.get("timing") == "source"
     return Check(id="tempo", passed=longest <= style["max_static_sec"] + 1e-6,
-                 redo_stage="storyboard", detail=f"spec longest hold={longest:.3f}s "
+                 severity="warn" if source else "block",
+                 redo_stage="clips" if source else "storyboard", detail=f"spec longest hold={longest:.3f}s "
                  f"(max {style['max_static_sec']:g}s); secondary: {secondary}")
 
 
@@ -298,6 +301,8 @@ def check_metadata(run_dir) -> Check:
 
 
 def check_yomi(run_dir) -> Check:
+    if registry.timing_for_run(run_dir) == "source":
+        return Check(id="yomi", passed=True, redo_stage="script", detail="no synthesis")
     if registry.timing_for_run(run_dir) == "music":
         return Check(id="yomi", passed=True, redo_stage="script", detail="no narration")
     run_dir = Path(run_dir)
@@ -319,6 +324,17 @@ def check_yomi(run_dir) -> Check:
         except (ValueError, OSError) as exc:
             detail = f"invalid yomi_check.json ({type(exc).__name__}); run `vg yomi RUN`"
     return Check(id="yomi", passed=passed, severity="block", redo_stage="script", detail=detail)
+
+
+def check_source_rights(run_dir) -> list[Check]:
+    """Additional source-timing gate; other routes retain existing policy."""
+    if registry.timing_for_run(run_dir) != "source":
+        return []
+    manifest = load(run_dir, "manifest")
+    videos = [a for a in manifest.assets if a.kind == "video"]
+    missing = [a.id for a in videos if not (a.license_url or "").strip() or not a.commercial_ok]
+    return [Check(id="rights", passed=bool(videos) and not missing, redo_stage="clips",
+                  detail=f"video assets={len(videos)}; missing licence URL/commercial permission={missing}")]
 
 
 def check_sfx_density(timeline, style=None) -> Check:
@@ -434,7 +450,7 @@ def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
             check_tempo(run_dir, metrics, style), check_speech_rate(metrics, style),
             check_caption_coverage(metrics, style), check_originality(run_dir, runs_root=runs_root, style=style),
             check_disclosure(run_dir), check_metadata(run_dir), check_sfx_density(run_dir, style), check_yomi(run_dir),
-            *check_english(run_dir)]
+            *check_source_rights(run_dir), *check_english(run_dir)]
 
 
 # Checks the human may waive for a variant they chose (taste/tempo); safety and rights checks never.
