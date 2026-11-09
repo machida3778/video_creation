@@ -51,6 +51,25 @@ export type Timeline = {
   clips: Clip[];
   captions: Caption[];
   audio: AudioClip[];
+  layout?: Layout | null; // from a format profile; absent = default look
 };
 
 export type ShortProps = {timeline: Timeline};
+
+// Mirror of vg/schemas.py Layout (format profiles).
+export type TextBand = {
+  text: string | null; top: number; height: number; background: string | null; color: string;
+  accent: string; stroke: string | null; size: number; weight: number; emphasis: string[];
+};
+export type CaptionLook = {
+  y: number; size: number; fill: string; stroke: string | null; stroke_ratio: number; accent: string;
+  box: string | null; weight: number; max_width: number; animation: 'pop' | 'none';
+};
+export type MediaFrame = {
+  mode: 'full' | 'box'; top: number; height: number; side: number; radius: number;
+  fill: 'blur' | 'color'; fill_color: string; dim: number;
+};
+export type Layout = {
+  background: string; media: MediaFrame; header: TextBand | null; footer: TextBand | null;
+  caption: CaptionLook; title: CaptionLook | null; progress_bar: string | null;
+};

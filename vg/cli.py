@@ -23,6 +23,9 @@
   vg usage [--check]               Claude subscription usage; --check exits 0 at or under headless.max_usage_percent
   vg analyze VIDEO [--json PATH]    measure pixels/audio and write a six-frame contact sheet
   vg sfx build                     synthesize the original local sound-effect library
+  vg reference add <URL|file> --id ID [--replace] | show ID   fetch/measure a reference video (local/formats/ID)
+  vg format list | show ID | validate ID | preview ID [--header TEXT]   formats learned from references
+  vg image add RUN SOURCE --id ID --license L --subject S [--at SEC] [--guideline URL]   licensed outside image
   vg feedback RUN "<text>" [--variant vN] | vg feedback RUN --show
   vg smoke                          fixed three-line run end to end (no GPU)
 <run> is a run/variant path, a directory name under runs/, "latest", or "<run>:v2".
@@ -341,6 +344,31 @@ def main(argv: list[str] | None = None) -> int:
     analyze.add_argument("video")
     analyze.add_argument("--json", type=Path)
     sub.add_parser("sfx").add_subparsers(dest="sfx_cmd", required=True).add_parser("build")
+    reference = sub.add_parser("reference", help="learn a format from a reference video").add_subparsers(
+        dest="reference_cmd", required=True)
+    reference_add = reference.add_parser("add")
+    reference_add.add_argument("source", help="video URL or local file")
+    reference_add.add_argument("--id", required=True, help="format id (local/formats/<id>/)")
+    reference_add.add_argument("--replace", action="store_true", help="drop earlier references of this format")
+    reference.add_parser("show").add_argument("id")
+    fmt = sub.add_parser("format", help="formats learned from reference videos").add_subparsers(
+        dest="format_cmd", required=True)
+    fmt.add_parser("list")
+    fmt.add_parser("show").add_argument("id")
+    fmt.add_parser("validate").add_argument("id")
+    fmt_preview = fmt.add_parser("preview")
+    fmt_preview.add_argument("id")
+    fmt_preview.add_argument("--header", help="sample header text")
+    image = sub.add_parser("image", help="add an official or licensed image to a run's manifest")
+    image.add_argument("image_cmd", choices=["add"])
+    image.add_argument("run")
+    image.add_argument("source", help="image URL or local file")
+    image.add_argument("--id", required=True, help="asset id used as visual.ref")
+    image.add_argument("--license", required=True, dest="license_id", help="config/licenses.yaml id")
+    image.add_argument("--subject", required=True, help="who or what the image shows")
+    image.add_argument("--page", help="page the image was taken from (official profile, press kit)")
+    image.add_argument("--at", type=float, help="take a still from the source video at this second (clip)")
+    image.add_argument("--guideline", help="URL of the creator's clip guideline (licences without a fixed URL)")
     feedback = sub.add_parser("feedback")
     feedback.add_argument("run")
     feedback.add_argument("text", nargs="?")
@@ -434,6 +462,23 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if a.cmd == "smoke":
         return cmd_smoke()
+    if a.cmd in ("reference", "format"):
+        from . import reference as references
+        try:
+            return references.main_reference(a) if a.cmd == "reference" else references.main_format(a)
+        except (ValueError, FileNotFoundError, RuntimeError) as exc:
+            print(f"{a.cmd}: {exc}", file=sys.stderr)
+            return 1
+    if a.cmd == "image":
+        from .library import add_image
+        try:
+            asset = add_image(runs.resolve(a.run), a.source, asset_id=a.id, license_id=a.license_id,
+                              subject=a.subject, page=a.page, at=a.at, guideline=a.guideline)
+        except (ValueError, FileNotFoundError, RuntimeError) as exc:
+            print(f"image: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(asset.model_dump(mode="json"), ensure_ascii=False, indent=2))
+        return 0
     if a.cmd == "sfx":
         from .sfx import build
         for path in build():

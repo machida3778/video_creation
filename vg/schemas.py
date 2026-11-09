@@ -48,6 +48,7 @@ class Route(Spec):
     confidence: float = Field(ge=0, le=1)
     reason: str
     new_type: bool = False          # True when /new-video-type created type_id for this request
+    format: str | None = None       # local/formats/<id>/format.json learned from a reference video
 
 
 # ---------------------------------------------------------------- research / script
@@ -201,6 +202,8 @@ class Storyboard(Spec):
     type_id: str
     scenes: list[Scene] = Field(min_length=1)
     music: Music | None = None
+    format: str | None = None       # format id (route.format); its layout is applied by vg timeline
+    header: str | None = None       # text of the format's fixed header band, e.g. the video's question
 
 
 def visible_chars(text: str) -> int:
@@ -324,6 +327,99 @@ class Manifest(Spec):
     assets: list[Asset] = []
 
 
+# ---------------------------------------------------------------- layout (format profiles -> renderer)
+# Coordinates are pixels on the 1080x1920 frame. Essential text stays inside the safe area used by QA:
+# x 120-900 and y 240-1440 (the Shorts UI covers the top bar, the right-hand buttons and the bottom
+# ~480 px with the title and channel name).
+Color = str
+
+
+class TextBand(BaseModel):
+    """A fixed band of text drawn over every scene (e.g. a header that keeps the question visible)."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    text: str | None = None                # header: filled per video from Storyboard.header
+    top: float = Field(260, ge=240, le=1300)
+    height: float = Field(220, gt=40, le=600)
+    background: Color | None = "#000000"   # None = transparent band
+    color: Color = "#ffffff"
+    accent: Color = "#ffd400"              # colour of `emphasis` words
+    stroke: Color | None = None
+    size: float = Field(64, ge=28, le=110)
+    weight: int = Field(900, ge=400, le=900)
+    emphasis: list[str] = []
+
+    @model_validator(mode="after")
+    def _inside(self):
+        if self.top + self.height > 1440 + 1e-6:
+            raise ValueError("band must end above y=1440 (Shorts bottom UI)")
+        return self
+
+
+class MediaFrame(BaseModel):
+    """Where the scene's image/video sits: full bleed, or a box with a blurred or flat fill around it."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    mode: Literal["full", "box"] = "full"
+    top: float = Field(480, ge=0, le=1800)
+    height: float = Field(800, gt=100, le=1920)
+    side: float = Field(0, ge=0, le=300)    # left/right margin of the box
+    radius: float = Field(0, ge=0, le=80)
+    fill: Literal["blur", "color"] = "blur"
+    fill_color: Color = "#000000"
+    dim: float = Field(0.0, ge=0, le=0.9)  # darken the media (full mode) so text stays readable
+
+
+class CaptionLook(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    y: float = Field(1215, ge=700, le=1400)    # centre of the caption block
+    size: float = Field(66, ge=36, le=96)
+    fill: Color = "#ffffff"
+    stroke: Color | None = "#111111"
+    stroke_ratio: float = Field(0.2, ge=0, le=0.35)
+    accent: Color = "#ffd400"
+    box: Color | None = None                    # background box behind each caption page
+    weight: int = Field(900, ge=400, le=900)
+    max_width: float = Field(780, ge=400, le=780)
+    animation: Literal["pop", "none"] = "pop"
+
+    @model_validator(mode="after")
+    def _inside(self):
+        # Two lines (emphasis 1.2x) around y must stay above the Shorts bottom UI.
+        if self.y + self.size * 1.28 * 1.1 > 1440 + 1e-6:
+            raise ValueError("caption block must end above y=1440 (Shorts bottom UI)")
+        return self
+
+
+class Layout(BaseModel):
+    """Presentation of a format; Timeline.layout carries it to the renderer (None = default look)."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    background: Color = "#0f1419"
+    media: MediaFrame = MediaFrame()
+    header: TextBand | None = None
+    footer: TextBand | None = None
+    caption: CaptionLook = CaptionLook()
+    title: CaptionLook | None = None            # title_card/hook_title text; None = renderer default
+    progress_bar: Color | None = None           # thin bar at y=240 that fills over the video
+
+    @model_validator(mode="after")
+    def _no_overlap(self):
+        bands = [b for b in (self.header, self.footer) if b is not None]
+        if len(bands) == 2 and (self.header.top < self.footer.top + self.footer.height
+                                and self.footer.top < self.header.top + self.header.height):
+            raise ValueError("header and footer bands overlap")
+        # Caption pages (normal and title-style) are two lines around their y, emphasis 1.2x.
+        for look in [self.caption] + ([self.title] if self.title else []):
+            half = look.size * 1.28 * 1.1
+            for band in bands:
+                if band.top < look.y + half and look.y - half < band.top + band.height:
+                    raise ValueError("caption block overlaps a text band")
+        # Overlay components (rank cards, character pairs) are scaled into the space between the header
+        # and the captions; keep at least 420 px (scale 0.35 of the 1200 px safe area).
+        top = self.header.top + self.header.height + 10 if self.header else 240
+        if self.caption.y - self.caption.size * 1.45 - top < 420:
+            raise ValueError("leave at least 420 px between the header band and the captions")
+        return self
+
+
 # ---------------------------------------------------------------- timeline (renderer input)
 class Clip(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -364,6 +460,7 @@ class Timeline(Spec):
     clips: list[Clip]
     captions: list[Caption] = []
     audio: list[AudioClip] = []
+    layout: Layout | None = None    # from the storyboard's format; None keeps the default look
 
     @model_validator(mode="after")
     def _within_duration(self):
@@ -504,6 +601,60 @@ class TypeSpec(BaseModel):
     content: list[ContentFlag] = []  # sensitive content the type may contain (checked against voice terms)
     risks: list[str] = []
     monetization: str = ""          # why it can count as original / editorial content
+
+
+class FormatBeat(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    role: str                        # hook, setup, item, reveal, twist, payoff, outro ...
+    share: float = Field(gt=0, le=1)  # fraction of the running time
+    note: str                        # what happens on screen and in the narration
+
+
+class FormatPacing(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    median_shot_sec: float = Field(gt=0)      # measured on the reference
+    max_static_sec: float = Field(gt=0)       # storyboard target (QA still applies config/style.yaml)
+    speech_cps: float | None = Field(None, ge=0)  # reference narration, display characters per second
+    narration_speed: float = Field(1.3, ge=0.8, le=1.8)   # VOICEVOX speed to match the reference
+    target_sec: float = Field(45, gt=0, le=59)
+
+
+class FormatReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: str                      # URL or local file the format was learned from
+    title: str | None = None
+    channel: str | None = None
+    duration_sec: float | None = None
+    analyzed: str | None = None      # local/formats/<id>/reference/analysis.json
+
+
+class FormatProfile(BaseModel):
+    """local/formats/<id>/format.json: a reusable video format learned from a reference the user liked.
+    It copies presentation and structure only; scripts, images and audio are always made anew."""
+    model_config = ConfigDict(extra="forbid")
+    schema_version: int = SCHEMA_VERSION
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{1,40}$")
+    name: str                        # Japanese display name
+    summary: str                     # one or two sentences: what makes the format work
+    references: list[FormatReference] = Field(min_length=1)
+    types: list[str] = Field(min_length=1)    # implemented types (types/*/type.yaml) it is used with
+    structure: list[FormatBeat] = Field(min_length=2)
+    pacing: FormatPacing
+    layout: Layout = Layout()
+    script_rules: list[str] = []     # hook pattern, sentence length, tone, punchline, ending
+    visual_rules: list[str] = []     # image kind (photo, character art, illustration), motion, colour
+    audio_rules: list[str] = []      # BGM mood/tempo, SFX usage, voice character
+    header_rule: str | None = None   # how to write Storyboard.header when layout.header is set
+    avoid: list[str] = []            # what not to copy (logos, catchphrases, the reference's own content)
+
+    @model_validator(mode="after")
+    def _shares(self):
+        total = sum(beat.share for beat in self.structure)
+        if not 0.95 <= total <= 1.05:
+            raise ValueError(f"structure shares must sum to 1 (got {total:.2f})")
+        if self.layout.header is not None and not self.header_rule:
+            raise ValueError("header_rule is required when the layout has a header band")
+        return self
 
 
 ContentFlag = Literal["political", "religious", "criticism", "adult"]

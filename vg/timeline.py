@@ -5,13 +5,16 @@ scene starts (the last one until the end). Scene props may carry:
   overlays: [{component, props}]  drawn on layer 1 for the scene's span (e.g. a source_card)
   captions: false                 no captions for the scene's lines (e.g. when a title card shows them)
 Asset ids (visual.ref, props.src_asset) resolve to paths through assets/manifest.json.
+A storyboard with `format` gets that format's layout (local/formats/<id>/format.json); `header` fills the
+layout's header band.
 """
 from __future__ import annotations
 
-from .captions import captions_for_line
+from .captions import band_text, captions_for_line
 from .registry import load_style
 from .sfx import asset_id, events
-from .schemas import AudioClip, Caption, Clip, Line, LineTiming, Manifest, Script, Storyboard, Timeline, Timings
+from .schemas import (AudioClip, Caption, Clip, Layout, Line, LineTiming, Manifest, Script, Storyboard, Timeline,
+                      Timings)
 
 TAIL = 0.5  # seconds after the last line
 
@@ -40,8 +43,29 @@ def _character_props(component: str, props: dict, line_ids: list[str], lines: di
     return result
 
 
+def resolve_layout(board: Storyboard, layout: Layout | None = None) -> Layout | None:
+    """The format's layout with the header band's text taken from the storyboard."""
+    if layout is None and board.format:
+        from .reference import load_format
+        layout = load_format(board.format).layout
+    if layout is None:
+        if board.header:
+            raise ValueError("storyboard.header needs a format whose layout has a header band")
+        return None
+    if layout.header is not None:
+        text = board.header or layout.header.text
+        if not text or not text.strip():
+            raise ValueError(f"format {board.format!r} has a header band: set storyboard.header")
+        text = band_text(text.strip(), layout.header.size)
+        layout = layout.model_copy(update={"header": layout.header.model_copy(update={"text": text})})
+    elif board.header:
+        raise ValueError(f"format {board.format!r} has no header band; remove storyboard.header")
+    return layout
+
+
 def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifest | None = None,
-          fps: int = 30) -> Timeline:
+          fps: int = 30, layout: Layout | None = None) -> Timeline:
+    layout = resolve_layout(board, layout)
     by_line = {t.line_id: t for t in timings.lines}
     lines = {line.id: line for line in script.lines}
     assets = {a.id: a.path for a in (manifest.assets if manifest else [])}
@@ -90,7 +114,7 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
             for lid in sc.line_ids:
                 line = lines[lid]
                 style = sc.caption_style or scene_role_style.get(line.speaker, "default")
-                captions.extend(captions_for_line(line, by_line[lid], style))
+                captions.extend(captions_for_line(line, by_line[lid], style, layout))
 
     audio = [AudioClip(start=t.start, src=t.audio, kind="voice") for t in timings.lines] + effects
     if board.music and board.music.asset:
@@ -100,4 +124,4 @@ def build(script: Script, timings: Timings, board: Storyboard, manifest: Manifes
                                gain_db=board.music.gain_db, duck_under_voice=False,
                                fade_in=mix_style["bgm_fade_in_sec"], fade_out=mix_style["bgm_fade_out_sec"]))
     return Timeline(fps=fps, duration=duration, clips=clips,
-                    captions=sorted(captions, key=lambda c: c.start), audio=audio)
+                    captions=sorted(captions, key=lambda c: c.start), audio=audio, layout=layout)

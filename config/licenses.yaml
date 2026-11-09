@@ -1,0 +1,30 @@
+# Licences under which `vg image add` may bring an outside picture into a run (assets/manifest.json).
+# Each entry names the published terms that allow commercial use (monetised YouTube) and what they require.
+# kinds: video = a still taken from the source video at --at seconds (a clip); image = the image file itself.
+# credit: template written into the asset's credit ({title}, {url}, {channel}); credit_first puts it at the top
+# of the description. Add an entry only after reading the terms; record the URL you read.
+
+licenses:
+  - id: hololive_clip
+    name: ホロライブプロダクション 二次創作ガイドライン（切り抜き動画）
+    url: https://hololivepro.com/terms/
+    kinds: [video]
+    commercial_ok: true   # YouTube partner programme revenue is allowed for clips that follow the guideline
+    credit: "元動画: {title}\n{url}"
+    credit_first: true    # the guideline asks for the source URL and title at the top of the description
+    conditions:
+      - 公式チャンネルの公開配信・動画からのみ切り抜く（メンバー限定・チケット制ライブは不可）
+      - 公式と誤認させる表現をしない（チャンネル名・タイトル・表紙に「公式」と書かない）
+      - タレントや会社のイメージを損なう編集をしない
+      - 公式イラスト・立ち絵をそのまま使うことはガイドラインの対象外（二次創作と見なされない）なので使わない
+      - 切り抜き動画をコンテンツIDに登録しない
+  - id: creator_clip
+    name: 配信者・グループが公開している切り抜きガイドライン
+    url: null             # required per use: --guideline <URL of the creator's published guideline>
+    kinds: [video, image]
+    commercial_ok: true   # only when the guideline says monetised clips are allowed; check before use
+    credit: "元動画: {title}\n{url}"
+    credit_first: true
+    conditions:
+      - ガイドラインが広告付き動画での利用を認めていることを確認し、その URL を --guideline に渡す
+      - ガイドラインが求める表記（元動画、チャンネル名、タグ）をすべて満たす

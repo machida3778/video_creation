@@ -13,7 +13,7 @@ from .schemas import Check, QAReport, Timeline
 from .analyze import analyze_run, scene_changes, interval_stats
 from .disclosure import realistic_assets
 from . import run as runs
-from .captions import em, FONT_PX
+from .captions import band_width, caption_box, em
 
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|inf|nan)"
 
@@ -159,13 +159,26 @@ def check_safe_area(timeline) -> Check:
     for caption in timeline.captions:
         lines = caption.text.split("\n")
         max_lines = max(max_lines, len(lines))
-        font_px = FONT_PX.get(caption.style, FONT_PX["default"])
+        font_px, limit = caption_box(caption.style, timeline.layout)
         measured = [font_px * em(line, caption.emphasis) for line in lines]
         widths.extend(measured)
-        violations += int(len(lines) > 2 or any(width > 780 for width in measured))
+        violations += int(len(lines) > 2 or any(width > limit for width in measured))
+    notes = []
+    for name in ("header", "footer"):
+        band = getattr(timeline.layout, name) if timeline.layout else None
+        if band is None or not (band.text or "").strip():
+            continue
+        # Band text: at most two lines inside the 780 px safe width (outline included) and the band's height.
+        rows = band.text.split("\n")
+        outline = band.size * 0.16 if band.stroke else 0
+        widest = max(band_width(row, band.size) for row in rows) + outline
+        bad = len(rows) > 2 or widest > 780 or len(rows) * band.size * 1.25 > band.height
+        violations += int(bad)
+        notes.append(f"{name}={len(rows)} line(s), width {widest:.0f}/780 px{' VIOLATION' if bad else ''}")
     return Check(id="safe_area", passed=violations == 0, redo_stage="timeline",
                  detail=f"captions={len(timeline.captions)}, max lines={max_lines}/2, "
-                        f"max width={max(widths, default=0):.2f}/780 px, violations={violations}")
+                        f"max width={max(widths, default=0):.2f}/{caption_box('default', timeline.layout)[1]:.0f} px, "
+                        f"bands={', '.join(notes) or 'none'}, violations={violations}")
 
 
 def check_caption_timing(timeline, duration=None) -> Check:
