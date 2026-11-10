@@ -287,6 +287,51 @@ def check_disclosure(run_dir) -> Check:
                  + ("publish present" if exists else f"publish pending; package sets synthetic_media={bool(ids)}"))
 
 
+# Rankings are entertainment: hedging the order (「独断で決めた」「根拠はない」) costs the video its confidence
+# and the viewer's fun (user, 2026-11-10). Facts still need sources; opinions are stated without excuses.
+RANKING_TYPES = {"ranking", "ranking_montage"}
+HEDGES = re.compile(
+    r"独断|偏見|勝手(?:に|な|ランキング)|根拠[はがの]?[、，,・\s]*(?:な[いし]|無[いし]|ありません|ゼロ)"
+    r"|個人(?:的|の(?:感想|意見|好み))|主観|異論(?:は)?(?:認め|あり|歓迎)|諸説あり|参考程度|真に受け|お遊び"
+    r"|あくまで(?:も)?(?:個人|一例|目安|参考|主観|私)|物差しの(?:ひと|一)つ|ネタとして")
+
+
+def _route_type(run_dir: Path) -> str | None:
+    try:
+        return load(run_dir, "route").type_id
+    except FileNotFoundError:
+        return None
+
+
+def ranking_texts(run_dir) -> list[tuple[str, str]]:
+    """(where, text) of everything a viewer reads: title, script lines, cards and labels, cover headlines, and
+    the packaged title/description when present."""
+    run_dir = Path(run_dir)
+    script = load(run_dir, "script")
+    texts = [("title", script.title)] + [(f"line {line.id}", line.text) for line in script.lines]
+    if (run_dir / "storyboard.json").is_file():
+        for scene in load(run_dir, "storyboard").scenes:
+            parts = [scene.props] + [ov.get("props", {}) for ov in scene.props.get("overlays", [])]
+            texts += [(f"scene {scene.id}", value) for part in parts for key in ("text", "name", "sub")
+                      if isinstance(value := part.get(key), str)]
+    if (run_dir / "covers.json").is_file():
+        texts += [(f"cover {option.id}", option.text) for option in load(run_dir, "covers").options]
+    if (run_dir / "publish.json").is_file():
+        publish = load(run_dir, "publish")
+        texts += [("publish title", publish.title), ("description", publish.description)]
+    return texts
+
+
+def check_confidence(run_dir) -> Check:
+    if _route_type(Path(run_dir)) not in RANKING_TYPES:
+        return Check(id="confidence", passed=True, redo_stage="script", detail="not a ranking")
+    found = [f"{where}: {match.group(0)}" for where, text in ranking_texts(run_dir)
+             for match in HEDGES.finditer(text)]
+    return Check(id="confidence", passed=not found, redo_stage="script",
+                 detail=("hedges the ranking (state it with confidence): " + "; ".join(found[:8])) if found
+                 else "no hedging in title, lines, cards, covers or description")
+
+
 def check_metadata(run_dir) -> Check:
     if not (Path(run_dir) / "publish.json").is_file():
         return Check(id="metadata", passed=True, redo_stage="package",
@@ -449,12 +494,13 @@ def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
             check_caption_timing(run_dir, _duration(info)), check_hook(metrics, style),
             check_tempo(run_dir, metrics, style), check_speech_rate(metrics, style),
             check_caption_coverage(metrics, style), check_originality(run_dir, runs_root=runs_root, style=style),
-            check_disclosure(run_dir), check_metadata(run_dir), check_sfx_density(run_dir, style), check_yomi(run_dir),
+            check_disclosure(run_dir), check_metadata(run_dir), check_confidence(run_dir),
+            check_sfx_density(run_dir, style), check_yomi(run_dir),
             *check_source_rights(run_dir), *check_english(run_dir)]
 
 
 # Checks the human may waive for a variant they chose (taste/tempo); safety and rights checks never.
-WAIVABLE = {"tempo", "speech_rate", "caption_coverage", "sfx_density", "mix", "silence", "duration"}
+WAIVABLE = {"tempo", "speech_rate", "caption_coverage", "sfx_density", "mix", "silence", "duration", "confidence"}
 
 
 def load_waivers(run_dir) -> dict[str, dict]:

@@ -138,7 +138,7 @@ export const ClipView: React.FC<{clip: Clip; frames: number}> = ({clip, frames})
     case 'character_pair':
       return <CharacterPair props={p as CharacterPairProps} />;
     case 'rank_label':
-      return <RankLabel props={p as RankLabelProps} />;
+      return <RankLabel props={p as RankLabelProps} frames={frames} />;
     case 'section_card':
       return <SectionCard props={p as SectionCardProps} />;
     default:

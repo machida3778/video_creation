@@ -275,7 +275,7 @@ class SyntheticMediaTests(unittest.TestCase):
 
     def test_original_sfx_build_copy_manifest_timeline_and_idempotence(self):
         paths = sfx.build(library_root=self.root)
-        self.assertEqual({p.stem for p in paths}, {"whoosh", "pop", "ding", "tick"})
+        self.assertEqual({p.stem for p in paths}, {"whoosh", "pop", "ding", "tick", "riser", "impact"})
         for path in paths:
             with self.subTest(effect=path.stem), wave.open(str(path)) as audio:
                 self.assertEqual((audio.getnchannels(), audio.getframerate(), audio.getsampwidth()), (1, 48000, 2))

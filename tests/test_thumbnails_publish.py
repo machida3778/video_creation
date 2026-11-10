@@ -145,6 +145,78 @@ class CoverTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "payoff line"):
                 thumbnail.thumbnail(root)
 
+    def test_collage_schema(self):
+        collage = option(image="", images=["a", "b", "c"])
+        self.assertEqual((collage.image, collage.sources), ("a", ["a", "b", "c"]))
+        self.assertEqual(option(image="a", images=["a", "b"]).sources, ["a", "b"])
+        self.assertEqual(option().sources, ["image"])
+        for changes in (dict(images=["a"]), dict(images=["a", "b", "c", "d"]), dict(images=["a", "a"]),
+                        dict(images=["a", " "]), dict(image="b", images=["a", "b"]),
+                        dict(image="", images=["a", "b"], prompt="x")):
+            with self.subTest(changes=changes), self.assertRaises(ValidationError):
+                option(**changes)
+        # Reports written before `images` existed still match the same option.
+        legacy = {k: v for k, v in option().model_dump().items() if k != "images"}
+        self.assertTrue(thumbnail._same(legacy, option()))
+
+    def test_talent_runs_need_talent_pictures_on_every_cover(self):
+        talent = {"m01", "m02"}
+        self.assertTrue(thumbnail.option_report(option())["checks"]["talent"])  # not a talent run
+        generated = thumbnail.option_report(option(image="cover_question", prompt="crown"), talent=talent)
+        self.assertFalse(generated["checks"]["talent"])
+        self.assertFalse(generated["passed"])
+        mixed = thumbnail.option_report(option(image="", images=["m01", "img_C1"]), talent=talent)
+        self.assertFalse(mixed["passed"])
+        for chosen in (option(image="m01"), option(image="", images=["m01", "m02"])):
+            report = thumbnail.option_report(chosen, talent=talent)
+            self.assertTrue(report["passed"], report["checks"])
+            box = report["layout"]["box"]
+            # Low headline: bottom of the safe region, below the faces in the upper part of the stills.
+            self.assertLessEqual(box["y"] + box["height"], thumbnail.SAFE["bottom"])
+            self.assertGreater(box["y"] + box["height"] / 2, 1050)
+            self.assertEqual(report["layout"]["shade"], "low")
+        self.assertIsNone(thumbnail.option_report(option())["layout"]["shade"])
+        manifest = Manifest(assets=[
+            Asset(id="m01", path="a.jpg", kind="image", origin="library", tool="vg image add",
+                  license="clip guideline", commercial_ok=True),
+            Asset(id="img_C1", path="b.png", kind="image", origin="generated", tool="z-image",
+                  license="synthetic fixture", commercial_ok=True)])
+        self.assertEqual(thumbnail.talent_ids(manifest), {"m01"})
+        self.assertEqual(thumbnail.talent_ids(None), set())
+
+    def test_talent_run_renders_collage_and_skips_generated_covers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("m01", "m02", "gen"):
+                Image.new("RGB", (108, 192), "red").save(root / f"{name}.png")
+            media.save(root, "covers", Covers(options=[
+                option(id="group", image="", images=["m01", "m02"]), option(id="crown", image="gen")]))
+            media.save(root, "script", Script(title="test", lines=[Line(id="L1", text="test")]))
+            media.save(root, "manifest", Manifest(assets=[
+                Asset(id=key, path=f"{key}.png", kind="image", origin="library", tool="vg image add",
+                      license="clip guideline", commercial_ok=True) for key in ("m01", "m02")] + [
+                Asset(id="gen", path="gen.png", kind="image", origin="generated", license="synthetic fixture",
+                      commercial_ok=True)]))
+            rendered = []
+
+            def still(command, **kwargs):
+                if command[0] != "npx":
+                    return media.run(command, **kwargs)
+                rendered.append(command)
+                scale = 2 if "--scale=2" in command else 1
+                Image.new("RGB", (1080 * scale, 1920 * scale), "red").save(Path(command[6]))
+
+            with patch.object(thumbnail, "run", side_effect=still), \
+                    warnings.catch_warnings(record=True) as notices:
+                warnings.simplefilter("always")
+                report = json.loads(thumbnail.thumbnail(root).read_text())
+            self.assertTrue(any("crown" in str(item.message) for item in notices))
+            self.assertEqual([item["passed"] for item in report["options"]], [True, False])
+            self.assertEqual(len(rendered), 2)  # jpg + png of the collage only
+            props = json.loads((root / "thumbs/group.props.json").read_text())
+            self.assertEqual((props["src"], props["srcs"]), ("m01.png", ["m01.png", "m02.png"]))
+            self.assertEqual(thumbnail.selected_cover(root), "group")
+
     def test_cli_thumbnail(self):
         with patch.object(cli.runs, "resolve", return_value=Path("/tmp/synthetic")), \
                 patch.object(thumbnail, "thumbnail", return_value=Path("/tmp/synthetic/covers_report.json")) as render, \

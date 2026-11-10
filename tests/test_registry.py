@@ -31,7 +31,7 @@ MODEL_KEYS = {
 }
 QA_KEYS = {
     "duration", "loudness", "safe_area", "yomi", "facts", "originality",
-    "rights", "disclosure", "sensitivity",
+    "rights", "disclosure", "sensitivity", "confidence",
 }
 
 

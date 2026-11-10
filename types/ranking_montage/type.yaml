@@ -4,17 +4,18 @@ version: 1
 status: experimental
 priority: P1
 description: ナレーションなしで人物やキャラクターを順位ラベルと音楽に合わせてカウントダウンする。
-use_when: [〇〇最強ランキング, 推しの勝手ランキング]
-avoid_when: [出典のない主張を事実として提示するランキング]
+use_when: [〇〇最強ランキング, 推しのランキング]
+avoid_when: [出典のない数値を事実として提示するランキング, 本人の画像を使う許諾（切り抜きガイドライン）がない実在の人物]
 pipeline: music_motion
 timing: music
 length:
-  youtube_shorts: {target: 50, min: 30, max: 59}
+  youtube_shorts: {target: 40, min: 30, max: 59}
 research: {required: false, required_when: ranking_claims_facts, min_sources: 1}
 voice: {}
 components: [ken_burns_image, rank_label, section_card]
 models: [t2i, music]
-params: {items: 16, item_sec: 3.4, top_card: Top, allowed_items: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}
-qa: [duration, loudness, safe_area, originality, rights]
-risks: [主観的な順位と事実の混同, 人物写真やキャラクター画像の権利]
-monetization: 独自の選定基準と順位、許諾済みの画像、手続き生成の演出でオリジナルの構成を作る。
+# 10位から（2026-11-10 ユーザー指示: 15位からは長すぎる）。1位は溜め＋閃光の演出つきで約6秒。
+params: {items: 10, item_sec: 3.4, first_sec: 6.0, top_card: Top, allowed_items: [5, 6, 7, 8, 9, 10]}
+qa: [duration, loudness, safe_area, originality, rights, confidence]
+risks: [出典のない数値を事実のように見せる, 人物写真やキャラクター画像の権利]
+monetization: 独自の選定と順位、許諾済みの画像、手続き生成の演出でオリジナルの構成を作る。

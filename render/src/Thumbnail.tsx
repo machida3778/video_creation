@@ -5,8 +5,11 @@ import {FONT} from './components/Caption';
 type Box = {x: number; y: number; width: number; height: number};
 export type ThumbnailProps = {
   width: number; height: number; src: string;
+  // A collage: 2–3 pictures side by side (e.g. the talents of a ranking); `src` alone is a single picture.
+  srcs?: string[];
   option: {text: string; emphasis: string[]; palette: 'yellow' | 'red' | 'white'; badge: string | null};
-  layout: {lines: string[]; font_size: number; line_height: number; padding: number; box: Box; badge: Box | null};
+  layout: {lines: string[]; font_size: number; line_height: number; padding: number; box: Box; badge: Box | null;
+    shade?: 'low' | null};
   arrow?: {x: number; y: number; angle: number};
 };
 const palettes = {yellow: '#ffd400', red: '#ff3b30', white: '#ffffff'};
@@ -40,9 +43,19 @@ export const Thumbnail: React.FC<ThumbnailProps> = (props) => {
     }
   }
   let offset = 0;
+  const collage = (props.srcs ?? []).length > 1 ? props.srcs! : null;
   return <AbsoluteFill style={{background: '#000'}}>
-    {props.src && <Img src={staticFile(props.src)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />}
+    {collage
+      // Full-height columns: each 9:16 still keeps its face (upper part) visible above the low headline.
+      ? <AbsoluteFill style={{display: 'flex', gap: 10}}>
+        {collage.map((src, i) => <div key={i} style={{flex: 1, height: '100%', overflow: 'hidden'}}>
+          <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        </div>)}
+      </AbsoluteFill>
+      : props.src && <Img src={staticFile(props.src)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />}
     <AbsoluteFill style={{background: 'radial-gradient(ellipse, transparent 35%, rgba(0,0,0,0.5) 100%)'}} />
+    {l.shade === 'low' && <AbsoluteFill style={{
+      background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.45) 62%, rgba(0,0,0,0.6) 100%)'}} />}
     <svg width={props.width} height={props.height} style={{position: 'absolute', fontFamily: FONT, fontWeight: 900}}>
       {l.badge && option.badge && <g>
         <rect {...l.badge} rx={32} fill={color} />

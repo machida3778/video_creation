@@ -128,7 +128,7 @@ def build(script: Script, timings: Timings, board: Storyboard | None = None, man
         label = next((ov.get("props", {}) for ov in sc.props.get("overlays", [])
                       if ov["component"] == "rank_label"), None)
         if music and label is not None:
-            props.update({k: label[k] for k in ("rank", "tier", "color") if k in label})
+            props.update({k: label[k] for k in ("rank", "tier", "color", "reveal") if k in label})
         for effect_id, offset in events(sc.props.get("sfx")):
             key = asset_id(effect_id)
             if key not in assets or not any(a.id == key and a.kind == "sfx" for a in manifest.assets):

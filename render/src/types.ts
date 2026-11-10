@@ -10,7 +10,9 @@ export type Clip = {
 };
 
 export type RankCardProps = {rank: number; label: string; value?: string; bar?: number; color?: string};
-export type RankLabelProps = {rank: number; name: string; tier?: 'normal' | 'top5' | 'top3' | 'top1'; color?: string};
+// reveal: seconds of the 1st-place build-up before the picture and label appear (tier top1).
+export type RankLabelProps = {rank: number; name: string; tier?: 'normal' | 'top5' | 'top3' | 'top1'; color?: string;
+  reveal?: number};
 export type SectionCardProps = {text: string; color?: string};
 export type CountdownProps = {from: number; to: number};
 export type RankScrollProps = {

@@ -2,7 +2,7 @@ id: ranking
 name: データで見るランキング
 status: experimental
 priority: P1
-description: 出典と比較条件をそろえた数値で順位付けし、各順位の理由と指標の限界を説明する。
+description: 出典と比較条件をそろえた数値で順位付けし、各順位の理由を自信をもって言い切る。
 use_when: [人口密度の上位五地域を比較して, 公開統計で再生可能エネルギー比率を順位付けして, カウントダウン形式でデータを紹介して]
 avoid_when: [根拠のない優劣付け, 年次や単位が異なるデータの混在]
 pipeline: narration_stills
@@ -18,4 +18,4 @@ models: [tts, t2i, music, asr, vlm]
 params: {style: countdown, items: 5, allowed_styles: [scroll, countdown]}
 qa: [duration, loudness, safe_area, yomi, facts, originality, rights]
 risks: [総合リスク：中, 比較条件や集計の不一致, 順位だけを流す量産的な構成]
-monetization: 毎回指標の選定理由と計算過程を示し、各順位への固有の解説と比較の限界を加える。
+monetization: 毎回指標の選定理由と出典を示し、各順位への固有の解説と発見を加える。

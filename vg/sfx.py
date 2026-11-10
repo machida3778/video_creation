@@ -21,6 +21,14 @@ SOURCES = {
              "afade=t=in:d=0.003,afade=t=out:st=0.5:d=0.1"),
     "tick": (0.025, "aevalsrc=0.65*sin(2*PI*3200*t)*exp(-400*t):s=48000:d=0.025,"
              "afade=t=in:d=0.001,afade=t=out:st=0.015:d=0.01"),
+    # Two rising chirps (220->1180 Hz, 330->1770 Hz) over seeded noise, swelling quadratically for 1.6 s.
+    "riser": (1.6, "aevalsrc='(0.22*sin(2*PI*(220*t+300*t*t))+0.12*sin(2*PI*(330*t+450*t*t))"
+              "+0.10*(random(0)*2-1))*(t/1.6)*(t/1.6)':s=48000:d=1.6,"
+              "highpass=f=150,afade=t=in:d=0.05,afade=t=out:st=1.52:d=0.08"),
+    # A falling 70 Hz boom, a short noise burst and a bright 2.6 kHz shimmer.
+    "impact": (1.0, "aevalsrc='0.8*(0.7*sin(2*PI*(70*t-12*t*t))*exp(-4.5*t)+0.3*(random(0)*2-1)*exp(-18*t)"
+               "+0.1*sin(2*PI*2600*t)*exp(-5*t))':s=48000:d=1.0,"
+               "lowpass=f=9000,afade=t=in:d=0.002,afade=t=out:st=0.85:d=0.15"),
 }
 
 

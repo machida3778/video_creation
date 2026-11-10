@@ -7,6 +7,7 @@ caption_coverage_min: 0.85  # Fraction with a caption or title card visible; ove
 originality_max_similarity: 0.6  # Maximum character-3-gram Jaccard similarity to other runs.
 bgm_below_voice_db: 10     # Measured music level relative to the concatenated voice.
 sfx_below_voice_db: 6      # Measured effect level relative to the concatenated voice.
+sfx_vs_music_db: 3         # Without narration (music-timed videos): effect level relative to the measured music.
 bgm_fade_in_sec: 0.3
 bgm_fade_out_sec: 1.0
 sfx_max_per_10s: 3          # Maximum effect starts in any half-open 10-second window.

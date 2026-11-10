@@ -32,7 +32,25 @@ def contained(box: dict) -> bool:
             and box["y"] + box["height"] <= SAFE["bottom"])
 
 
-def layout(option: CoverOption) -> dict:
+def talent_ids(manifest) -> set[str]:
+    """Pictures of real talents or characters: everything `vg image add` brought in (stream stills, official
+    images under a clip guideline). A run that has them is about those people, so its covers must show them."""
+    if manifest is None:
+        return set()
+    return {asset.id for asset in manifest.assets
+            if asset.tool == "vg image add" and asset.kind in ("image", "character_art")}
+
+
+def _talents(run_dir: Path) -> set[str]:
+    try:
+        return talent_ids(load(run_dir, "manifest"))
+    except FileNotFoundError:
+        return set()
+
+
+def layout(option: CoverOption, low: bool = False) -> dict:
+    """Headline placement. `low` puts it at the bottom of the safe region, so the faces in a talent cover (the
+    upper part of the stills) stay visible."""
     # Fixed em cells prevent font-dependent wrapping and horizontal squeezing. Each SVG
     # glyph uses the same cell; 20 px padding includes outline and soft shadow.
     lines = [line[i:i + 5] for line in option.text.split("\n") for i in range(0, len(line), 5)]
@@ -43,16 +61,20 @@ def layout(option: CoverOption) -> dict:
     line_height = size * 1.2
     width = max(map(len, lines)) * size + 40
     height = len(lines) * line_height + 40
-    box = {"x": 486 - width / 2, "y": 1050 - height / 2, "width": width, "height": height}
+    top = SAFE["bottom"] - 8 - height if low else 1050 - height / 2
+    box = {"x": 486 - width / 2, "y": top, "width": width, "height": height}
     badge = None
     if option.badge is not None:
         badge = {"x": 128, "y": 510, "width": len(option.badge) * 140 + 40, "height": 208}
     return {"lines": lines, "font_size": size, "line_height": line_height, "padding": 20,
-            "box": box, "badge": badge}
+            "box": box, "badge": badge, "shade": "low" if low else None}
 
 
-def option_report(option: CoverOption, placement: dict | None = None) -> dict:
-    placement = placement or layout(option)
+def option_report(option: CoverOption, placement: dict | None = None, talent: set[str] | None = None) -> dict:
+    """Checks of one option. `talent` holds the run's talent pictures (talent_ids): when there are any, every
+    picture on the cover must be one of them, since only the faces tell viewers who the video is about."""
+    shows_talent = bool(talent) and all(source in talent for source in option.sources)
+    placement = placement or layout(option, low=shows_talent)
     chars = visible_chars(option.text)
     ratios = {"white_outline": contrast("#ffffff", "#000000"),
               "emphasis_outline": contrast(PALETTES[option.palette], "#000000")}
@@ -62,7 +84,8 @@ def option_report(option: CoverOption, placement: dict | None = None) -> dict:
               "min_glyph_size": placement["font_size"] >= 126,
               "safe_region": contained(placement["box"]) and
               (placement["badge"] is None or contained(placement["badge"])),
-              "contrast": all(ratio >= 4.5 for ratio in ratios.values())}
+              "contrast": all(ratio >= 4.5 for ratio in ratios.values()),
+              "talent": not talent or shows_talent}
     return {"id": option.id, "option": option.model_dump(), "line_id": option.line_id, "chars": chars,
             "lines": len(placement["lines"]), "min_glyph_size": placement["font_size"],
             "contrast": ratios, "layout": placement, "checks": checks,
@@ -84,8 +107,9 @@ def selected_cover(run_dir: Path) -> str:
     covers = load(run_dir, "covers")
     report = json.loads((run_dir / "covers_report.json").read_text(encoding="utf-8"))
     passing = {item["id"]: item for item in report["options"] if item.get("passed") is True}
+    talent = _talents(run_dir)
     valid = [option.id for option in covers.options if option.id in passing
-             and _same(passing[option.id].get("option"), option) and option_report(option)["passed"]]
+             and _same(passing[option.id].get("option"), option) and option_report(option, talent=talent)["passed"]]
     chosen = report.get("chosen_id")
     if chosen is not None and chosen not in valid:
         raise ValueError("chosen cover did not pass thumbnail checks")
@@ -109,6 +133,7 @@ def thumbnail(run_dir: Path) -> Path:
     run_dir = Path(run_dir).resolve()
     covers, script, manifest = (load(run_dir, stage) for stage in ("covers", "script", "manifest"))
     assets = {asset.id: asset for asset in manifest.assets}
+    talent = talent_ids(manifest)
     output = run_dir / "thumbs"
     output.mkdir(exist_ok=True)
     # Invalidate any previous successful report before attempting a new render; the judge's record
@@ -123,18 +148,25 @@ def thumbnail(run_dir: Path) -> Path:
             previous.unlink()
         for previous in output.glob(f"{option.id}_*.jpg"):
             previous.unlink()
-        item = option_report(option)
+        item = option_report(option, talent=talent)
         reports.append(item)
         if option.line_id not in {line.id for line in script.lines}:
             raise ValueError(f"{option.id}: payoff line is missing: {option.line_id}")
-        asset = assets.get(option.image)
-        if asset is None or asset.kind not in ("image", "character_art") or not asset.commercial_ok:
-            raise ValueError(f"{option.id}: focal image requires a commercially licensed image asset")
-        local_file(run_dir, asset.path)
+        paths = []
+        for source in option.sources:
+            asset = assets.get(source)
+            if asset is None or asset.kind not in ("image", "character_art") or not asset.commercial_ok:
+                raise ValueError(f"{option.id}: focal image requires a commercially licensed image asset")
+            local_file(run_dir, asset.path)
+            paths.append(asset.path)
+        if not item["checks"]["talent"]:
+            warnings.warn(f"{option.id}: this run shows real talents or characters, so the cover must use their "
+                          f"pictures (image/images from: {', '.join(sorted(talent))}), not other or generated "
+                          "images", stacklevel=2)
         if not item["passed"]:
             continue
         props = output / f"{option.id}.props.json"
-        props.write_text(json.dumps({"option": option.model_dump(), "src": asset.path,
+        props.write_text(json.dumps({"option": option.model_dump(), "src": paths[0], "srcs": paths,
                                      "layout": item["layout"], "width": 1080, "height": 1920},
                                     ensure_ascii=False), encoding="utf-8")
         for scale, extension in ((1, "jpg"), (2, "png")):

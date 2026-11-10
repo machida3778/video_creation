@@ -16,12 +16,12 @@ class MontageTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.script = Script(title="synthetic", lines=[
-            Line(id="title", text="勝手ランキング"),
+            Line(id="title", text="最強ランキング"),
             Line(id="L6", text="架空六"),
             Line(id="top", text="Top"),
             *[Line(id=f"L{i}", text=f"架空{i}") for i in range(5, 0, -1)]])
         self.board = Storyboard(type_id="ranking_montage", scenes=[
-            Scene(id="title", line_ids=["title"], component="section_card", props={"text": "勝手ランキング", "sec": 1}),
+            Scene(id="title", line_ids=["title"], component="section_card", props={"text": "最強ランキング", "sec": 1}),
             Scene(id="C6", line_ids=["L6"], component="ken_burns_image", transition="mirror",
                   props={"sec": 3.4, "overlays": [
                       {"component": "rank_label", "props": {"rank": 6, "name": "架空六", "tier": "normal"}}]}),
@@ -54,14 +54,59 @@ class MontageTests(unittest.TestCase):
         self.assertEqual((spec.status, spec.pipeline, spec.timing), ("experimental", "music_motion", "music"))
         self.assertEqual(spec.voice, {})
         self.assertEqual(registry.cast_for_type(spec, {}, {}), {})
-        self.assertEqual(spec.params["allowed_items"], list(range(5, 21)))
-        self.assertEqual((spec.params["items"], spec.params["item_sec"], spec.params["top_card"]), (16, 3.4, "Top"))
+        # 10位から (user, 2026-11-10: counting down from 15 was too long); the 1st place gets a longer reveal.
+        self.assertEqual(spec.params["allowed_items"], list(range(5, 11)))
+        self.assertEqual((spec.params["items"], spec.params["item_sec"], spec.params["first_sec"],
+                          spec.params["top_card"]), (10, 3.4, 6.0, "Top"))
         self.assertEqual(spec.components, ["ken_burns_image", "rank_label", "section_card"])
         self.assertFalse({"yomi", "facts"} & set(spec.qa))
+        self.assertIn("confidence", spec.qa)
         self.assertFalse(spec.research["required"])
         self.assertEqual(spec.research["required_when"], "ranking_claims_facts")
         limit = spec.length["youtube_shorts"]
-        self.assertEqual((limit.target, limit.min, limit.max), (50, 30, 59))
+        self.assertEqual((limit.target, limit.min, limit.max), (40, 30, 59))
+
+    def test_countdown_starts_at_tenth_place_at_most(self):
+        def board(count):
+            scenes = [Scene(id=f"C{i}", line_ids=[f"L{i}"], component="ken_burns_image", props={
+                "sec": 3.4, "overlays": [{"component": "rank_label", "props": {"rank": i, "name": f"架空{i}"}}]})
+                for i in range(count, 0, -1)]
+            script = Script(title="synthetic", lines=[Line(id=f"L{i}", text=f"架空{i}") for i in range(count, 0, -1)])
+            return script, Storyboard(type_id="ranking_montage", scenes=scenes)
+        self.assertEqual(len(tts.music_timings(*board(10)).lines), 10)
+        with self.assertRaisesRegex(ValueError, "10位"):
+            tts.music_timings(*board(11))
+        script, too_high = board(3)
+        too_high.scenes[0].props["overlays"][0]["props"]["rank"] = 15
+        with self.assertRaisesRegex(ValueError, "from 15位"):
+            tts.music_timings(script, too_high)
+
+    def test_first_place_reveal_reaches_the_picture_and_its_effects_are_levelled_to_the_music(self):
+        first = self.board.scenes[-1]
+        first.props["sec"] = 6.0
+        first.props["overlays"][0]["props"]["reveal"] = 1.6
+        first.props["sfx"] = [{"id": "riser", "at": 0}, {"id": "impact", "at": 1.6}]
+        for effect in ("riser", "impact"):
+            self.manifest.assets.append(Asset(id=f"sfx_{effect}", path=f"{effect}.wav", kind="sfx",
+                                              origin="generated", tool="vg sfx", license="original",
+                                              commercial_ok=True))
+        timings, timeline = self.timeline()
+        base = [c for c in timeline.clips if c.layer == 0][-1]
+        self.assertEqual((base.props["tier"], base.props["reveal"], base.end - base.start), ("top1", 1.6, 6.0))
+        effects = [a for a in timeline.audio if a.kind == "sfx"]
+        self.assertEqual([(a.src, round(a.start - base.start, 6)) for a in effects],
+                         [("riser.wav", 0.0), ("impact.wav", 1.6)])
+        for name, source in (("synthetic.wav", "sine=frequency=440:sample_rate=48000:duration=24"),
+                             ("riser.wav", "sine=frequency=880:sample_rate=48000:duration=1.6"),
+                             ("impact.wav", "sine=frequency=110:sample_rate=48000:duration=1")):
+            media.run([str(media.FFMPEG), "-hide_banner", "-nostdin", "-y", "-f", "lavfi", "-i", source,
+                       "-af", "volume=0.3" if name != "synthetic.wav" else "volume=1", str(self.root / name)])
+        report = mix.prepare_mix(self.root, timeline, style=self.style | {"sfx_vs_music_db": 3})
+        music = next(c for c in report["clips"] if c["kind"] == "music")
+        for clip in (c for c in report["clips"] if c["kind"] == "sfx"):
+            self.assertAlmostEqual(clip["output_level_db"], music["output_level_db"] + 3, places=1)
+        media.save(self.root, "timeline", timeline)
+        self.assertTrue(qa.check_mix(self.root).passed)
 
     def test_storyboard_timings_and_no_mutation(self):
         before = self.board.model_dump()
@@ -206,6 +251,34 @@ class MontageTests(unittest.TestCase):
         self.assertAlmostEqual(float(media.probe(mixed)["format"]["duration"]), timeline.duration, places=3)
         self.route("ranking")
         self.assertFalse(qa.check_mix(self.root).passed)
+
+    def test_rankings_are_stated_with_confidence(self):
+        self.timeline()
+        check = qa.check_confidence(self.root)
+        self.assertTrue(check.passed, check.detail)
+        hedges = ["独断で決めた最強ランキング", "根拠はありません", "根拠は、\nないはずでした", "根拠なしの最強",
+                  "勝手にランキング", "個人的な順位", "主観です", "異論は認める", "諸説あり", "あくまで目安",
+                  "登録者数は人気の物差しのひとつです"]
+        for text in hedges:
+            with self.subTest(text=text):
+                self.script.lines[0].text = text
+                media.save(self.root, "script", self.script)
+                check = qa.check_confidence(self.root)
+                self.assertFalse(check.passed)
+                self.assertIn("line title", check.detail)
+        for fine in ("最強ランキング", "根拠のある数字", "第1位は架空一", "勝負の行方"):
+            with self.subTest(text=fine):
+                self.script.lines[0].text = fine
+                media.save(self.root, "script", self.script)
+                self.assertTrue(qa.check_confidence(self.root).passed)
+        # Cards, labels and cover headlines are read too.
+        self.board.scenes[0].props["text"] = "独断ランキング"
+        media.save(self.root, "storyboard", self.board)
+        self.assertIn("scene title", qa.check_confidence(self.root).detail)
+        # Other types are not rankings.
+        self.route("trivia_explainer")
+        self.assertEqual(qa.check_confidence(self.root).detail, "not a ranking")
+        self.assertIn("confidence", qa.WAIVABLE)
 
 
 if __name__ == "__main__":

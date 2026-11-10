@@ -120,6 +120,14 @@ def prepare_mix(run_dir, timeline: Timeline, *, style=None) -> dict:
         voice["sources"] = [{"src": a.src, "start": a.start, "gain_db": a.gain_db} for a in voices]
     reference = voice["level_db"] if voice else None
     clips, measured = [], {}
+    # Without narration (music-timed videos) effects are levelled against the music instead, so a reveal's
+    # impact is heard over the BGM whatever the track's loudness.
+    music_reference = None
+    music = next((a for a in timeline.audio if a.kind == "music"), None)
+    if reference is None and music is not None:
+        measured[music.src] = measure_level([run_dir / music.src])
+        if measured[music.src]["level_db"] is not None:
+            music_reference = measured[music.src]["level_db"] + music.gain_db
     for audio in timeline.audio:
         if audio.kind == "voice":
             continue
@@ -130,6 +138,8 @@ def prepare_mix(run_dir, timeline: Timeline, *, style=None) -> dict:
         level = source["level_db"]
         if reference is not None and level is not None:
             audio.gain_db = reference - offset - level
+        elif audio.kind == "sfx" and music_reference is not None and level is not None:
+            audio.gain_db = music_reference + style["sfx_vs_music_db"] - level
         audio.duration = source["duration_sec"]
         if audio.kind == "music":
             audio.duck_under_voice = False

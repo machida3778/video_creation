@@ -20,7 +20,7 @@ import httpx
 
 from . import narrator
 from . import media
-from .registry import load_voices
+from .registry import load_types, load_voices
 from .schemas import Asset, LineTiming, Manifest, Script, Span, Storyboard, Timings, VoiceSpec
 
 VOICEVOX_URL = os.environ.get("VOICEVOX_URL", "http://127.0.0.1:50021")
@@ -34,6 +34,16 @@ def music_timings(script: Script, board: Storyboard) -> Timings:
     ids = [lid for scene in board.scenes for lid in scene.line_ids]
     if any(len(scene.line_ids) != 1 for scene in board.scenes) or ids != [line.id for line in script.lines]:
         raise ValueError("music storyboard must cover every script line exactly once, in order, one per scene")
+    spec = load_types().get(board.type_id)
+    allowed = (spec.params.get("allowed_items") if spec else None) or []
+    if allowed:
+        # The countdown starts at 10位 at most (user, 2026-11-10: 15位から is too long).
+        ranks = [overlay.get("props", {}).get("rank") for scene in board.scenes
+                 for overlay in scene.props.get("overlays", []) if overlay.get("component") == "rank_label"]
+        highest = max([len(ranks)] + [rank for rank in ranks if isinstance(rank, int)])
+        if highest > max(allowed):
+            raise ValueError(f"{board.type_id}: count down from {max(allowed)}位 at most "
+                             f"(the storyboard has {len(ranks)} ranked items, from {highest}位)")
     cursor, lines = 0.0, []
     for scene in board.scenes:
         sec = scene.props.get("sec")

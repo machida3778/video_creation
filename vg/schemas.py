@@ -269,6 +269,9 @@ class CoverOption(BaseModel):
     # A scene image from the manifest, or a cover-only image: give `prompt` (and optionally negative/seed)
     # and `vg assets` generates it as cover_<id> (docs/THUMBNAILS.md 「表紙専用の画像」).
     image: str = ""
+    # A collage instead: 2–3 manifest images side by side, e.g. several talents of a ranking so viewers see
+    # at a glance who the video is about (docs/THUMBNAILS.md 「人物・キャラクターの動画」). `image` is the first.
+    images: list[str] = []
     prompt: str | None = None
     negative: str | None = None
     seed: int | None = None
@@ -281,10 +284,24 @@ class CoverOption(BaseModel):
     def cover_image_id(self) -> str:
         return f"cover_{self.id}"  # scene images are always img_<scene>, so the names never collide
 
+    @property
+    def sources(self) -> list[str]:
+        """Manifest ids of every picture on the cover."""
+        return list(self.images) if self.images else [self.image]
+
     @model_validator(mode="after")
     def _headline(self):
         if self.id == "sheet":
             raise ValueError("cover id 'sheet' is reserved for the contact sheet")
+        if self.images:
+            if not 2 <= len(self.images) <= 3 or len(set(self.images)) != len(self.images) \
+                    or not all(item.strip() for item in self.images):
+                raise ValueError("a collage cover needs 2–3 distinct image ids")
+            if self.prompt is not None:
+                raise ValueError("a collage cover uses manifest images, not a prompt")
+            if self.image and self.image != self.images[0]:
+                raise ValueError("a collage cover's image is its first entry in images")
+            self.image = self.images[0]
         if self.prompt is not None:
             if not self.prompt.strip():
                 raise ValueError("cover prompt must not be empty")
@@ -561,6 +578,7 @@ class Style(BaseModel):
     originality_max_similarity: float = Field(0.6, ge=0, le=1)
     bgm_below_voice_db: float = Field(10.0, ge=0)
     sfx_below_voice_db: float = Field(6.0, ge=0)
+    sfx_vs_music_db: float = Field(3.0, ge=-20, le=10)   # without narration: effects relative to the music
     bgm_fade_in_sec: float = Field(0.3, ge=0)
     bgm_fade_out_sec: float = Field(1.0, ge=0)
     sfx_max_per_10s: int = Field(3, ge=0)
