@@ -304,6 +304,38 @@ def repair_thumbnails(root=None) -> list[dict]:
     return repaired
 
 
+def set_description(variant_dir, *, confirm: bool = False) -> dict:
+    """Bring an uploaded video's description (and its English localisation's) in line with the packaged
+    publish.json / en.json, e.g. after a new cover added credits for stills it uses. Title, tags, category and
+    the English title stay as they are on YouTube. Without `confirm` only the planned change is returned."""
+    variant_dir = Path(variant_dir)
+    record, result = _published(variant_dir)
+    publish = load(variant_dir, "publish")
+    english = load(variant_dir, "en") if (variant_dir / "en.json").is_file() else None
+    client = _service()
+    items = client.videos().list(part="snippet,localizations", id=result["video_id"]).execute().get("items", [])
+    if not items:
+        raise ValueError(f"video {result['video_id']} not found on YouTube")
+    snippet, localizations = items[0]["snippet"], items[0].get("localizations") or {}
+    plan = {"video_id": result["video_id"], "description": {"before": snippet.get("description", ""),
+                                                          "after": publish.description}}
+    if english is not None and "en" in localizations:
+        plan["en_description"] = {"before": localizations["en"].get("description", ""), "after": english.description}
+    if not confirm:
+        return plan
+    keep = {key: snippet[key] for key in ("title", "categoryId", "tags", "defaultLanguage", "defaultAudioLanguage")
+            if key in snippet}
+    body = {"id": result["video_id"], "snippet": keep | {"description": publish.description}}
+    part = "snippet"
+    if "en_description" in plan:
+        body["localizations"] = localizations | {"en": localizations["en"] | {"description": english.description}}
+        part += ",localizations"
+    client.videos().update(part=part, body=body).execute()
+    result.setdefault("history", []).append({"description": "updated", "at": datetime.now(timezone.utc).isoformat()})
+    _save_json(record, result)
+    return plan | {"updated": True}
+
+
 def set_privacy(variant_dir, privacy: str) -> dict:
     """Change an uploaded variant's visibility (e.g. private test -> public), keeping its other status flags."""
     if privacy not in ("private", "unlisted", "public"):

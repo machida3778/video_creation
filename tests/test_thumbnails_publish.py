@@ -299,6 +299,33 @@ class YoutubeTests(unittest.TestCase):
             self.assertEqual(service.call_count, 1)
             self.assertIn("body", youtube.upload(self.variant, dry_run=True, force=True))
 
+    def test_description_sync_plans_then_updates_only_descriptions(self):
+        record = {"video_id": "test123", "url": "https://youtube.com/shorts/test123", "privacy": "public"}
+        (self.variant / "published_youtube.json").write_text(json.dumps(record))
+        media.save(self.variant, "publish", publish(description="元動画: 配信\nhttps://example.invalid/v\n\n本文"))
+        snippet = {"title": "YouTube上のタイトル", "description": "本文", "categoryId": "27", "tags": ["解説"],
+                   "defaultLanguage": "ja", "defaultAudioLanguage": "ja", "thumbnails": {"default": {}}}
+        self.client.videos().list().execute.return_value = {"items": [{"id": "test123", "snippet": snippet,
+            "localizations": {"en": {"title": "English title", "description": "Body"}}}]}
+        with patch.object(youtube, "_service", return_value=self.client):
+            plan = youtube.set_description(self.variant)
+            self.assertEqual(plan["description"], {"before": "本文", "after": publish(
+                description="元動画: 配信\nhttps://example.invalid/v\n\n本文").description})
+            self.assertNotIn("en_description", plan)  # no en.json in this variant
+            self.client.videos().update.assert_not_called()
+            result = youtube.set_description(self.variant, confirm=True)
+        self.assertTrue(result["updated"])
+        request = self.client.videos().update.call_args.kwargs
+        self.assertEqual(request["part"], "snippet")
+        self.assertEqual(request["body"]["snippet"]["title"], "YouTube上のタイトル")  # title kept as on YouTube
+        self.assertNotIn("thumbnails", request["body"]["snippet"])
+        self.assertTrue(request["body"]["snippet"]["description"].startswith("元動画: 配信"))
+        saved = json.loads((self.variant / "published_youtube.json").read_text())
+        self.assertEqual(saved["history"][-1]["description"], "updated")
+        self.client.videos().list().execute.return_value = {"items": []}
+        with patch.object(youtube, "_service", return_value=self.client), self.assertRaisesRegex(ValueError, "not found"):
+            youtube.set_description(self.variant)
+
     def test_optional_errors_keep_uploaded_id_and_fallback_jpeg(self):
         (self.variant / "cover.png").unlink()
         self.client.thumbnails().set().execute.side_effect = RuntimeError("not eligible for custom thumbnails")

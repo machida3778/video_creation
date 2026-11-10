@@ -16,6 +16,7 @@
   vg en RUN[:vN] [--cpu]           English captions/dub; parent RUN batches all en.json variants
   vg publish auth youtube         authorize the optional official YouTube uploader
   vg publish youtube RUN:vN --confirm [--privacy private|unlisted|public] [--at ISO8601] [--dry-run]
+  vg publish youtube-thumbnail RUN:vN | youtube-description RUN:vN [--confirm]   re-set cover / sync description
   vg daily init | status [--check] | next | history [--limit N]   daily autopost (local/requests.md)
   vg daily add "<request>" --reason "..." | start "<request>" --run RUN | fail "<reason>" | skip "<reason>"
   vg daily publish RUN:vN --confirm [--dry-run]   schedule for the run's slot (private + publishAt)
@@ -366,6 +367,9 @@ def main(argv: list[str] | None = None) -> int:
     thumb = publish.add_parser("youtube-thumbnail")  # retry the cover of an uploaded variant
     thumb.add_argument("run")
     publish.add_parser("youtube-thumbnails")  # re-set covers YouTube kept without a vertical version
+    desc = publish.add_parser("youtube-description")  # sync an uploaded description (e.g. new credits)
+    desc.add_argument("run")
+    desc.add_argument("--confirm", action="store_true")
     vis = publish.add_parser("youtube-privacy")  # e.g. private test upload -> public
     vis.add_argument("run")
     vis.add_argument("--privacy", choices=["private", "unlisted", "public"], required=True)
@@ -478,6 +482,11 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("publishing requires a human-chosen variant: RUN:vN")
             if a.publish_cmd == "youtube-thumbnail":
                 print(json.dumps(publish_youtube.set_thumbnail(chosen), ensure_ascii=False, indent=2))
+                return 0
+            if a.publish_cmd == "youtube-description":
+                # Without --confirm: print the planned before/after only.
+                print(json.dumps(publish_youtube.set_description(chosen, confirm=a.confirm),
+                                 ensure_ascii=False, indent=2))
                 return 0
             if a.publish_cmd == "youtube-privacy":
                 if not a.confirm:
