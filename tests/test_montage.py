@@ -6,7 +6,8 @@ import unittest
 from unittest.mock import patch
 
 from vg import analyze, assets, cli, media, mix, qa, registry, run as runs, tts
-from vg.schemas import (Asset, CoverOption, Covers, Line, Manifest, Music, Publish, Route, Scene, Script, Storyboard)
+from vg.schemas import (Asset, CoverOption, Covers, Line, Manifest, Music, Publish, Research, Route, Scene, Script,
+                        Source, Storyboard)
 from vg.timeline import build
 
 
@@ -321,13 +322,16 @@ class MontageTests(unittest.TestCase):
             check = qa.check_confidence(self.root, metadata_only=metadata_only)
             self.assertTrue(check.passed, check.detail)
             self.assertEqual(check.id, "confidence_metadata" if metadata_only else "confidence")
-        for description in ("本文。順位は独断です。", "順位は独断です。 https://example.invalid/details"):
+        for description in ("本文。順位は独断です。", "順位は独断です。 https://example.invalid/details",
+                            "- 順位は独断です。 https://example.invalid/details"):
             media.save(self.root, "publish", Publish(
                 title="最強ランキング", description=description, hashtags=["#a", "#b", "#c"],
                 platforms=["youtube_shorts"], synthetic_media=False))
             with self.subTest(description=description):
                 self.assertFalse(qa.check_confidence(self.root, metadata_only=True).passed)
-        # Source-list entries are not prose.
+        # Source-list entries citing the run's research sources are not prose.
+        media.save(self.root, "research", Research(sources=[Source(
+            id="S1", title="独断と偏見の調査", url="https://example.invalid/s", accessed="2026-11-10")]))
         media.save(self.root, "publish", Publish(
             title="最強ランキング", description="本文\n\n出典\n- 独断と偏見の調査 https://example.invalid/s",
             hashtags=["#a", "#b", "#c"], platforms=["youtube_shorts"], synthetic_media=False))

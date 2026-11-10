@@ -328,14 +328,18 @@ _URL = re.compile(r"https?://\S+")
 def _without_credits(run_dir: Path, text: str) -> str:
     """A description without the required credit lines and source-list entries (a source video titled 「独断と偏見で…」
     must still be credited verbatim); URLs are removed from other lines, whose prose is still checked."""
-    credits = set()
+    credits, sources = set(), set()
     if (run_dir / "assets" / "manifest.json").is_file():
         credits = {line.strip() for asset in load(run_dir, "manifest").assets if asset.credit
                    for line in asset.credit.splitlines() if line.strip()}
+    if (run_dir / "research.json").is_file():
+        sources = {source.url for source in load(run_dir, "research").sources if source.url}
     kept = []
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped in credits or (stripped[:1] in ("-", "・", "•") and _URL.search(stripped)):
+        # Only list entries that cite one of the run's research sources are exempt, not any bullet with a URL.
+        if stripped in credits or (stripped[:1] in ("-", "・", "•")
+                                   and any(url in stripped for url in sources)):
             continue
         kept.append(_URL.sub("", line))
     return "\n".join(kept)
