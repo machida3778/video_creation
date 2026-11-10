@@ -43,7 +43,32 @@ def _video_meta(url: str) -> dict:
             "channel": info.get("channel") or info.get("uploader") or "", "duration": info.get("duration")}
 
 
-def _still_from_video(url: str, at: float, target: Path) -> None:
+def parse_crop(text: str | None) -> tuple[float, float, float] | None:
+    """`--crop CX,TOP,H`: centre x, top and height as fractions of the source frame (0..1)."""
+    if not text:
+        return None
+    try:
+        cx, top, height = (float(v) for v in text.split(","))
+    except ValueError as exc:
+        raise ValueError("--crop needs CX,TOP,H as three fractions, e.g. 0.85,0.3,0.7") from exc
+    if not (0 <= cx <= 1 and 0 <= top < 1 and 0 < height <= 1 and top + height <= 1 + 1e-9):
+        raise ValueError("--crop fractions must lie in the frame: 0<=CX<=1, 0<=TOP, 0<H, TOP+H<=1")
+    return cx, top, height
+
+
+def vertical_crop(image: Image.Image, crop: tuple[float, float, float], size=(1080, 1920)) -> tuple[Image.Image, dict]:
+    """A 9:16 box of height H*frame around centre CX from TOP, clamped inside the frame, scaled to `size`."""
+    cx, top, height = crop
+    width_px, height_px = image.size
+    box_h = max(16, round(height * height_px))
+    box_w = min(width_px, round(box_h * size[0] / size[1]))
+    x0 = min(max(0, round(cx * width_px - box_w / 2)), width_px - box_w)
+    y0 = min(max(0, round(top * height_px)), height_px - box_h)
+    out = image.crop((x0, y0, x0 + box_w, y0 + box_h)).resize(size, Image.LANCZOS)
+    return out, {"x": x0, "y": y0, "w": box_w, "h": box_h, "frame": [width_px, height_px]}
+
+
+def _still_from_video(url: str, at: float, target: Path, crop: tuple[float, float, float] | None = None) -> dict | None:
     with tempfile.TemporaryDirectory() as tmp:
         run(["uvx", "yt-dlp", "--no-playlist", "--no-progress", "--ffmpeg-location", str(Path(FFMPEG).parent),
              "-f", "bv*[width<=1920][height<=1920]/b", "--download-sections", f"*{max(0.0, at):.2f}-{at + 3:.2f}",
@@ -51,8 +76,17 @@ def _still_from_video(url: str, at: float, target: Path) -> None:
         clips = sorted(Path(tmp).glob("clip.*"))
         if not clips:
             raise FileNotFoundError("yt-dlp did not produce the clip")
+        if crop is None:
+            run([str(FFMPEG), "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-ss", "0.5", "-i", str(clips[0]),
+                 "-frames:v", "1", "-vf", "scale='min(1080,iw)':-2", "-q:v", "2", str(target)])
+            return None
+        full = Path(tmp) / "full.png"  # crop from the full-resolution frame: corner avatars are small
         run([str(FFMPEG), "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-ss", "0.5", "-i", str(clips[0]),
-             "-frames:v", "1", "-vf", "scale='min(1080,iw)':-2", "-q:v", "2", str(target)])
+             "-frames:v", "1", str(full)])
+        with Image.open(full) as image:
+            out, box = vertical_crop(image.convert("RGB"), crop)
+        out.save(target, quality=92)
+        return box
 
 
 def _image(source: str, target: Path) -> None:
@@ -81,7 +115,7 @@ def _image(source: str, target: Path) -> None:
 
 def add_image(run_dir: Path, source: str, *, asset_id: str, license_id: str, subject: str,
               page: str | None = None, at: float | None = None, guideline: str | None = None,
-              licenses: dict[str, dict] | None = None) -> Asset:
+              licenses: dict[str, dict] | None = None, crop: str | None = None) -> Asset:
     licenses = load_licenses() if licenses is None else licenses
     if license_id not in licenses:
         raise ValueError(f"unknown licence {license_id!r}; known: {sorted(licenses)} ({LICENSES_FILE})")
@@ -94,6 +128,9 @@ def add_image(run_dir: Path, source: str, *, asset_id: str, license_id: str, sub
     if not url:
         raise ValueError(f"licence {license_id} needs --guideline <URL of the published guideline>")
     kind = "video" if at is not None else "image"
+    crop_box = parse_crop(crop)
+    if crop_box and kind != "video":
+        raise ValueError("--crop works on a still from a video (--at)")
     if kind not in spec["kinds"]:
         raise ValueError(f"licence {license_id} allows {spec['kinds']}, not {kind}"
                          + (" (give --at SECONDS to take a still from the source video)" if kind == "image" else ""))
@@ -112,7 +149,9 @@ def add_image(run_dir: Path, source: str, *, asset_id: str, license_id: str, sub
         meta = _video_meta(source)
         if meta["duration"] and at >= meta["duration"]:
             raise ValueError(f"--at {at} is beyond the video's {meta['duration']} s")
-        _still_from_video(source, at, target)
+        box = _still_from_video(source, at, target, crop_box)
+        if box:
+            params["crop"] = {**box, "fractions": list(crop_box)}
         params.update(at=at, source_title=meta["title"], source_channel=meta["channel"], source_url=meta["url"])
     else:
         _image(source, target)

@@ -25,7 +25,8 @@
   vg sfx build                     synthesize the original local sound-effect library
   vg reference add <URL|file> --id ID [--replace] | show ID   fetch/measure a reference video (local/formats/ID)
   vg format list | show ID | validate ID | preview ID [--header TEXT]   formats learned from references
-  vg image add RUN SOURCE --id ID --license L --subject S [--at SEC] [--guideline URL]   licensed outside image
+  vg image add RUN SOURCE --id ID --license L --subject S [--at SEC] [--crop CX,TOP,H] [--guideline URL]   licensed outside image
+  vg moments VIDEO|CHANNEL --out DIR [--videos 2] [--n 9] [--chat] [--window FROM TO] [--no-frames]   most-replayed/chat peaks + frame sheet
   vg feedback RUN "<text>" [--variant vN] | vg feedback RUN --show
   vg smoke                          fixed three-line run end to end (no GPU)
 <run> is a run/variant path, a directory name under runs/, "latest", or "<run>:v2".
@@ -388,6 +389,15 @@ def main(argv: list[str] | None = None) -> int:
     fmt_preview = fmt.add_parser("preview")
     fmt_preview.add_argument("id")
     fmt_preview.add_argument("--header", help="sample header text")
+    moments = sub.add_parser("moments", help="peaks of a public video (most replayed / chat) with a frame sheet")
+    moments.add_argument("source", help="video URL, or channel URL (newest public uploads)")
+    moments.add_argument("--out", required=True, help="directory for <video id>/sheet.jpg and moments.json")
+    moments.add_argument("--videos", type=int, default=2, help="videos per channel")
+    moments.add_argument("--n", type=int, default=9, help="moments per video")
+    moments.add_argument("--chat", action="store_true", help="fall back to live-chat density (slow)")
+    moments.add_argument("--window", nargs=2, type=float, metavar=("FROM", "TO"),
+                         help="only this part of each video, in seconds (e.g. 120 480 for the opening talk)")
+    moments.add_argument("--no-frames", action="store_true", help="times only, no contact sheet")
     image = sub.add_parser("image", help="add an official or licensed image to a run's manifest")
     image.add_argument("image_cmd", choices=["add"])
     image.add_argument("run")
@@ -397,6 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     image.add_argument("--subject", required=True, help="who or what the image shows")
     image.add_argument("--page", help="page the image was taken from (official profile, press kit)")
     image.add_argument("--at", type=float, help="take a still from the source video at this second (clip)")
+    image.add_argument("--crop", help="CX,TOP,H fractions: vertical 9:16 crop around the talent (from the full frame)")
     image.add_argument("--guideline", help="URL of the creator's clip guideline (licences without a fixed URL)")
     feedback = sub.add_parser("feedback")
     feedback.add_argument("run")
@@ -498,11 +509,27 @@ def main(argv: list[str] | None = None) -> int:
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             print(f"{a.cmd}: {exc}", file=sys.stderr)
             return 1
+    if a.cmd == "moments":
+        from .moments import collect
+        try:
+            results = collect(a.source, Path(a.out), videos=a.videos, count=a.n, chat=a.chat,
+                              frames=not a.no_frames, window=tuple(a.window) if a.window else None)
+        except (ValueError, FileNotFoundError, RuntimeError) as exc:
+            print(f"moments: {exc}", file=sys.stderr)
+            return 1
+        for r in results:
+            if "error" in r:
+                print(f"{r['url']}: {r['error']}")
+                continue
+            times = ", ".join(f"#{m.get('n', i + 1)} {m['t']:.0f}s" for i, m in enumerate(r["moments"]))
+            print(f"{r['url']}  [{r['signal']}]  {r['title'][:50]}\n  {times}\n  sheet: {r.get('sheet', '-')}")
+        return 0
     if a.cmd == "image":
         from .library import add_image
         try:
             asset = add_image(runs.resolve(a.run), a.source, asset_id=a.id, license_id=a.license_id,
-                              subject=a.subject, page=a.page, at=a.at, guideline=a.guideline)
+                              subject=a.subject, page=a.page, at=a.at, guideline=a.guideline,
+                              crop=a.crop)
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             print(f"image: {exc}", file=sys.stderr)
             return 1
