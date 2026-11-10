@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from vg import analyze, assets, cli, media, mix, qa, registry, run as runs, tts
-from vg.schemas import (Asset, Line, Manifest, Music, Route, Scene, Script, Storyboard)
+from vg.schemas import (Asset, CoverOption, Covers, Line, Manifest, Music, Publish, Route, Scene, Script, Storyboard)
 from vg.timeline import build
 
 
@@ -77,9 +77,21 @@ class MontageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "10位"):
             tts.music_timings(*board(11))
         script, too_high = board(3)
-        too_high.scenes[0].props["overlays"][0]["props"]["rank"] = 15
-        with self.assertRaisesRegex(ValueError, "from 15位"):
-            tts.music_timings(script, too_high)
+        for rank in (15, 15.0):
+            too_high.scenes[0].props["overlays"][0]["props"]["rank"] = rank
+            with self.subTest(rank=rank), self.assertRaisesRegex(ValueError, "from 15位"):
+                tts.music_timings(script, too_high)
+        for rank in ("15", 0, -1, 2.5, True, None):
+            too_high.scenes[0].props["overlays"][0]["props"]["rank"] = rank
+            with self.subTest(rank=rank), self.assertRaisesRegex(ValueError, "positive integer"):
+                tts.music_timings(script, too_high)
+        # Labels drawn as base scenes count too.
+        script, mixed = board(10)
+        script.lines.insert(0, Line(id="L11", text="架空11"))
+        mixed.scenes.insert(0, Scene(id="C11", line_ids=["L11"], component="rank_label",
+                                     props={"sec": 3.4, "rank": 11, "name": "架空11"}))
+        with self.assertRaisesRegex(ValueError, "11 ranked items"):
+            tts.music_timings(script, mixed)
 
     def test_first_place_reveal_reaches_the_picture_and_its_effects_are_levelled_to_the_music(self):
         first = self.board.scenes[-1]
@@ -257,7 +269,8 @@ class MontageTests(unittest.TestCase):
         check = qa.check_confidence(self.root)
         self.assertTrue(check.passed, check.detail)
         hedges = ["独断で決めた最強ランキング", "根拠はありません", "根拠は、\nないはずでした", "根拠なしの最強",
-                  "勝手にランキング", "個人的な順位", "主観です", "異論は認める", "諸説あり", "あくまで目安",
+                  "根拠は特にありません", "勝手にランキング", "個人的な順位", "個人の見解です", "主観です",
+                  "異論は認める", "諸説あり", "あくまで目安", "あくまでネタです", "私的ランキング",
                   "登録者数は人気の物差しのひとつです"]
         for text in hedges:
             with self.subTest(text=text):
@@ -266,19 +279,55 @@ class MontageTests(unittest.TestCase):
                 check = qa.check_confidence(self.root)
                 self.assertFalse(check.passed)
                 self.assertIn("line title", check.detail)
-        for fine in ("最強ランキング", "根拠のある数字", "第1位は架空一", "勝負の行方"):
+        for fine in ("最強ランキング", "根拠のある数字", "第1位は架空一", "勝負の行方", "自主観測の精度ランキング"):
             with self.subTest(text=fine):
                 self.script.lines[0].text = fine
                 media.save(self.root, "script", self.script)
                 self.assertTrue(qa.check_confidence(self.root).passed)
-        # Cards, labels and cover headlines are read too.
-        self.board.scenes[0].props["text"] = "独断ランキング"
+        # Cards, labels, nested rank cards / scroll items, the header and cover badges are read too.
+        for where, change in (("scene title", lambda b: b.scenes[0].props.update(text="独断ランキング")),
+                              ("scene C5", lambda b: b.scenes[3].props["overlays"].append(
+                                  {"component": "rank_card", "props": {"rank": 5, "label": "独断です"}})),
+                              ("scene C5", lambda b: b.scenes[3].props["overlays"].append(
+                                  {"component": "rank_scroll", "props": {"items": [{"label": "偏見で選出"}]}})),
+                              ("header", lambda b: setattr(b, "header", "勝手ランキング"))):
+            board = self.board.model_copy(deep=True)
+            change(board)
+            media.save(self.root, "storyboard", board)
+            with self.subTest(where=where):
+                self.assertIn(where, qa.check_confidence(self.root).detail)
         media.save(self.root, "storyboard", self.board)
-        self.assertIn("scene title", qa.check_confidence(self.root).detail)
+        cover = CoverOption(id="c1", template="ranking", text="最強\n1位は？", badge="独断", image="m1", line_id="L1",
+                            palette="yellow", ai_generated=False, photorealistic=False)
+        media.save(self.root, "covers", Covers(options=[cover]))
+        self.assertIn("cover c1: 独断", qa.check_confidence(self.root).detail)
+        (self.root / "covers.json").unlink()
+        # Malformed input fails the check instead of aborting QA.
+        (self.root / "storyboard.json").write_text("{broken", encoding="utf-8")
+        check = qa.check_confidence(self.root)
+        self.assertFalse(check.passed)
+        self.assertIn("could not read", check.detail)
+        media.save(self.root, "storyboard", self.board)
+        # Packaged metadata: required credits may contain anything; the rest of the description may not.
+        self.manifest.assets.append(Asset(id="m1", path="m1.jpg", kind="image", origin="library", tool="vg image add",
+                                          license="clip guideline", commercial_ok=True,
+                                          credit="元動画: 独断と偏見で選ぶ配信\nhttps://example.invalid/v"))
+        media.save(self.root, "manifest", self.manifest)
+        media.save(self.root, "publish", Publish(
+            title="最強ランキング", description="元動画: 独断と偏見で選ぶ配信\nhttps://example.invalid/v\n\n本文",
+            hashtags=["#a", "#b", "#c"], platforms=["youtube_shorts"], synthetic_media=False))
+        for metadata_only in (False, True):
+            check = qa.check_confidence(self.root, metadata_only=metadata_only)
+            self.assertTrue(check.passed, check.detail)
+            self.assertEqual(check.id, "confidence_metadata" if metadata_only else "confidence")
+        media.save(self.root, "publish", Publish(
+            title="最強ランキング", description="本文。順位は独断です。", hashtags=["#a", "#b", "#c"],
+            platforms=["youtube_shorts"], synthetic_media=False))
+        self.assertFalse(qa.check_confidence(self.root, metadata_only=True).passed)
         # Other types are not rankings.
         self.route("trivia_explainer")
         self.assertEqual(qa.check_confidence(self.root).detail, "not a ranking")
-        self.assertIn("confidence", qa.WAIVABLE)
+        self.assertTrue({"confidence", "confidence_metadata"} <= qa.WAIVABLE)
 
 
 if __name__ == "__main__":

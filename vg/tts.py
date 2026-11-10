@@ -38,9 +38,21 @@ def music_timings(script: Script, board: Storyboard) -> Timings:
     allowed = (spec.params.get("allowed_items") if spec else None) or []
     if allowed:
         # The countdown starts at 10位 at most (user, 2026-11-10: 15位から is too long).
-        ranks = [overlay.get("props", {}).get("rank") for scene in board.scenes
-                 for overlay in scene.props.get("overlays", []) if overlay.get("component") == "rank_label"]
-        highest = max([len(ranks)] + [rank for rank in ranks if isinstance(rank, int)])
+        labels = []
+        for scene in board.scenes:
+            if scene.component == "rank_label":
+                labels.append(scene.props)
+            overlays = scene.props.get("overlays") or []
+            labels += [overlay.get("props") for overlay in overlays
+                       if isinstance(overlay, dict) and overlay.get("component") == "rank_label"]
+        ranks = []
+        for props in labels:
+            rank = props.get("rank") if isinstance(props, dict) else None
+            if isinstance(rank, bool) or not isinstance(rank, (int, float)) or not math.isfinite(rank) \
+                    or rank != int(rank) or rank < 1:
+                raise ValueError(f"{board.type_id}: rank_label rank must be a positive integer, got {rank!r}")
+            ranks.append(int(rank))
+        highest = max([len(ranks), *ranks])
         if highest > max(allowed):
             raise ValueError(f"{board.type_id}: count down from {max(allowed)}位 at most "
                              f"(the storyboard has {len(ranks)} ranked items, from {highest}位)")

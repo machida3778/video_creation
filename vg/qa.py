@@ -290,46 +290,87 @@ def check_disclosure(run_dir) -> Check:
 # Rankings are entertainment: hedging the order (「独断で決めた」「根拠はない」) costs the video its confidence
 # and the viewer's fun (user, 2026-11-10). Facts still need sources; opinions are stated without excuses.
 RANKING_TYPES = {"ranking", "ranking_montage"}
+_GAP = r"[、，,・\s]*"
 HEDGES = re.compile(
-    r"独断|偏見|勝手(?:に|な|ランキング)|根拠[はがの]?[、，,・\s]*(?:な[いし]|無[いし]|ありません|ゼロ)"
-    r"|個人(?:的|の(?:感想|意見|好み))|主観|異論(?:は)?(?:認め|あり|歓迎)|諸説あり|参考程度|真に受け|お遊び"
-    r"|あくまで(?:も)?(?:個人|一例|目安|参考|主観|私)|物差しの(?:ひと|一)つ|ネタとして")
+    r"独断|偏見|勝手(?:に|な|ランキング)"
+    rf"|根拠[はがの]?{_GAP}(?:特に|全く|まったく|一切|何も)?{_GAP}(?:な[いし]|無[いし]|ありません|ゼロ)"
+    r"|個人(?:的|の(?:感想|意見|好み|見解|主観))|(?<!自)主観|私的な?(?:ランキング|順位)"
+    r"|異論(?:は)?(?:認め|あり|歓迎)|諸説あり|参考程度|真に受け|お遊び"
+    r"|あくまで(?:も)?(?:個人|一例|目安|参考|主観|私|ネタ)|物差しの(?:ひと|一)つ|ネタとして|ネタです")
+# Storyboard prop keys drawn as text: labels, cards, rank cards and their scroll items, sources.
+TEXT_KEYS = {"text", "name", "sub", "label", "value", "header"}
 
 
 def _route_type(run_dir: Path) -> str | None:
     try:
         return load(run_dir, "route").type_id
-    except FileNotFoundError:
+    except (FileNotFoundError, ValueError):
         return None
 
 
-def ranking_texts(run_dir) -> list[tuple[str, str]]:
-    """(where, text) of everything a viewer reads: title, script lines, cards and labels, cover headlines, and
-    the packaged title/description when present."""
+def _drawn(value):
+    """Strings under TEXT_KEYS anywhere in scene props (overlays, rank_scroll items, ...)."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in TEXT_KEYS and isinstance(item, str):
+                yield item
+            elif isinstance(item, (dict, list)):
+                yield from _drawn(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _drawn(item)
+
+
+def _without_credits(run_dir: Path, text: str) -> str:
+    """A description without the required credit and source lines: a source video titled 「独断と偏見で…」 must
+    still be credited verbatim."""
+    credits = set()
+    if (run_dir / "assets" / "manifest.json").is_file():
+        credits = {line.strip() for asset in load(run_dir, "manifest").assets if asset.credit
+                   for line in asset.credit.splitlines() if line.strip()}
+    return "\n".join(line for line in text.splitlines() if line.strip() not in credits and "http" not in line)
+
+
+def ranking_texts(run_dir, *, metadata_only: bool = False) -> list[tuple[str, str]]:
+    """(where, text) of everything a viewer reads: title, script lines, cards and labels, the storyboard header,
+    cover headlines and badges, and the packaged title/description when present (`metadata_only`: only those)."""
     run_dir = Path(run_dir)
-    script = load(run_dir, "script")
-    texts = [("title", script.title)] + [(f"line {line.id}", line.text) for line in script.lines]
-    if (run_dir / "storyboard.json").is_file():
-        for scene in load(run_dir, "storyboard").scenes:
-            parts = [scene.props] + [ov.get("props", {}) for ov in scene.props.get("overlays", [])]
-            texts += [(f"scene {scene.id}", value) for part in parts for key in ("text", "name", "sub")
-                      if isinstance(value := part.get(key), str)]
-    if (run_dir / "covers.json").is_file():
-        texts += [(f"cover {option.id}", option.text) for option in load(run_dir, "covers").options]
+    texts = []
+    if not metadata_only:
+        script = load(run_dir, "script")
+        texts += [("title", script.title)] + [(f"line {line.id}", line.text) for line in script.lines]
+        if (run_dir / "storyboard.json").is_file():
+            board = load(run_dir, "storyboard")
+            if board.header:
+                texts.append(("header", board.header))
+            for scene in board.scenes:
+                texts += [(f"scene {scene.id}", text) for text in _drawn(scene.props)]
+        if (run_dir / "covers.json").is_file():
+            for option in load(run_dir, "covers").options:
+                texts += [(f"cover {option.id}", text) for text in (option.text, option.badge) if text]
     if (run_dir / "publish.json").is_file():
         publish = load(run_dir, "publish")
-        texts += [("publish title", publish.title), ("description", publish.description)]
+        texts += [("publish title", publish.title), ("description", _without_credits(run_dir, publish.description))]
     return texts
 
 
-def check_confidence(run_dir) -> Check:
-    if _route_type(Path(run_dir)) not in RANKING_TYPES:
-        return Check(id="confidence", passed=True, redo_stage="script", detail="not a ranking")
-    found = [f"{where}: {match.group(0)}" for where, text in ranking_texts(run_dir)
-             for match in HEDGES.finditer(text)]
-    return Check(id="confidence", passed=not found, redo_stage="script",
+def check_confidence(run_dir, *, metadata_only: bool = False) -> Check:
+    """Block hedged rankings. `metadata_only` (check id confidence_metadata) re-reads just the packaged title and
+    description; packaging runs it after writing publish.json, while `vg qa` keeps its full `confidence` result."""
+    check_id = "confidence_metadata" if metadata_only else "confidence"
+    run_dir = Path(run_dir)
+    if _route_type(run_dir) not in RANKING_TYPES:
+        return Check(id=check_id, passed=True, redo_stage="script", detail="not a ranking")
+    try:
+        texts = ranking_texts(run_dir, metadata_only=metadata_only)
+    except (OSError, ValueError, TypeError, AttributeError) as exc:  # pydantic's ValidationError is a ValueError
+        return Check(id=check_id, passed=False, redo_stage="script",
+                     detail=f"could not read the texts to check: {type(exc).__name__}: {exc}"[:500])
+    found = [f"{where}: {match.group(0)}" for where, text in texts for match in HEDGES.finditer(text)]
+    return Check(id=check_id, passed=not found, redo_stage="package" if metadata_only else "script",
                  detail=("hedges the ranking (state it with confidence): " + "; ".join(found[:8])) if found
-                 else "no hedging in title, lines, cards, covers or description")
+                 else "no hedging in " + ("title or description" if metadata_only
+                                         else "title, lines, cards, covers or description"))
 
 
 def check_metadata(run_dir) -> Check:
@@ -500,7 +541,8 @@ def run_checks(run_dir, *, runs_root: Path | None = None) -> list[Check]:
 
 
 # Checks the human may waive for a variant they chose (taste/tempo); safety and rights checks never.
-WAIVABLE = {"tempo", "speech_rate", "caption_coverage", "sfx_density", "mix", "silence", "duration", "confidence"}
+WAIVABLE = {"tempo", "speech_rate", "caption_coverage", "sfx_density", "mix", "silence", "duration", "confidence",
+            "confidence_metadata"}
 
 
 def load_waivers(run_dir) -> dict[str, dict]:

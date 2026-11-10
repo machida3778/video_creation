@@ -155,8 +155,11 @@ def package(run_dir) -> Path:
                               c.ai_generated and c.photorealistic for c in load(run_dir, "covers").options)),
                       music_track=board.music.track if board and board.music else None)
     save(run_dir, "publish", publish)
-    from .qa import check_english
-    report = write_report(run_dir, [check_metadata(run_dir), *check_english(run_dir)])
+    from .qa import check_confidence, check_english
+    # The packaged title/description are new text: re-check them for hedged rankings (confidence_metadata),
+    # leaving `vg qa`'s full confidence result in place.
+    report = write_report(run_dir, [check_metadata(run_dir), *check_english(run_dir),
+                                    check_confidence(run_dir, metadata_only=True)])
     if not report.passed:
         raise ValueError("Packaging requires passed metadata QA (see qa.json)")
     covers(run_dir)

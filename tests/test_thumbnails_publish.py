@@ -183,6 +183,9 @@ class CoverTests(unittest.TestCase):
                   license="synthetic fixture", commercial_ok=True)])
         self.assertEqual(thumbnail.talent_ids(manifest), {"m01"})
         self.assertEqual(thumbnail.talent_ids(None), set())
+        # `vg image add --not-talent` (a venue or logo) does not make the run a talent run.
+        manifest.assets[0].params["talent"] = False
+        self.assertEqual(thumbnail.talent_ids(manifest), set())
 
     def test_talent_run_renders_collage_and_skips_generated_covers(self):
         with tempfile.TemporaryDirectory() as temporary:

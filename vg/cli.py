@@ -413,6 +413,8 @@ def main(argv: list[str] | None = None) -> int:
     image.add_argument("--at", type=float, help="take a still from the source video at this second (clip)")
     image.add_argument("--crop", help="CX,TOP,H fractions: vertical 9:16 crop around the talent (from the full frame)")
     image.add_argument("--guideline", help="URL of the creator's clip guideline (licences without a fixed URL)")
+    image.add_argument("--not-talent", action="store_true",
+                       help="the picture shows no talent or character (venue, logo); covers need not use it")
     feedback = sub.add_parser("feedback")
     feedback.add_argument("run")
     feedback.add_argument("text", nargs="?")
@@ -538,7 +540,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             asset = add_image(runs.resolve(a.run), a.source, asset_id=a.id, license_id=a.license_id,
                               subject=a.subject, page=a.page, at=a.at, guideline=a.guideline,
-                              crop=a.crop)
+                              crop=a.crop, talent=not a.not_talent)
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             print(f"image: {exc}", file=sys.stderr)
             return 1

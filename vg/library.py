@@ -115,7 +115,9 @@ def _image(source: str, target: Path) -> None:
 
 def add_image(run_dir: Path, source: str, *, asset_id: str, license_id: str, subject: str,
               page: str | None = None, at: float | None = None, guideline: str | None = None,
-              licenses: dict[str, dict] | None = None, crop: str | None = None) -> Asset:
+              licenses: dict[str, dict] | None = None, crop: str | None = None, talent: bool = True) -> Asset:
+    """`talent`: the picture shows a talent or character (params.talent). Covers of a run with talent pictures
+    must use them (vg/thumbnail.py); pass False for a venue, logo or other picture without the people."""
     licenses = load_licenses() if licenses is None else licenses
     if license_id not in licenses:
         raise ValueError(f"unknown licence {license_id!r}; known: {sorted(licenses)} ({LICENSES_FILE})")
@@ -139,7 +141,7 @@ def add_image(run_dir: Path, source: str, *, asset_id: str, license_id: str, sub
     relative = f"assets/library/{asset_id}.jpg"
     target = run_dir / relative
     target.parent.mkdir(parents=True, exist_ok=True)
-    params: dict = {"subject": subject, "source": source, "license_id": license_id}
+    params: dict = {"subject": subject, "source": source, "license_id": license_id, "talent": bool(talent)}
     if page:
         params["page"] = page
     meta = {"title": "", "url": page or source, "channel": ""}

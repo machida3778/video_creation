@@ -33,12 +33,14 @@ def contained(box: dict) -> bool:
 
 
 def talent_ids(manifest) -> set[str]:
-    """Pictures of real talents or characters: everything `vg image add` brought in (stream stills, official
-    images under a clip guideline). A run that has them is about those people, so its covers must show them."""
+    """Pictures of real talents or characters: what `vg image add` brought in (stream stills, official images under
+    a clip guideline) unless it was marked `--not-talent` (params.talent false; older records count as talent). A run
+    that has them is about those people, so its covers must show them."""
     if manifest is None:
         return set()
     return {asset.id for asset in manifest.assets
-            if asset.tool == "vg image add" and asset.kind in ("image", "character_art")}
+            if asset.tool == "vg image add" and asset.kind in ("image", "character_art")
+            and asset.params.get("talent", True) is not False}
 
 
 def _talents(run_dir: Path) -> set[str]:
