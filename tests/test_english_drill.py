@@ -2,7 +2,9 @@
 from copy import deepcopy
 import io
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -177,7 +179,8 @@ class EnglishDrillTests(unittest.TestCase):
     def test_ring_frame_window_counts_to_zero_and_video_crop_preserves_defaults(self):
         # Use installed TypeScript/React without a browser, models or any network.
         # Hooks provide a deterministic Remotion frame clock for static SVG/media markup.
-        node = Path("/home/machidai/.local/opt/node/bin/node")
+        found = os.environ.get("VG_NODE") or shutil.which("node")
+        node = Path(found) if found else Path.home() / ".local/opt/node/bin/node"
         if not node.is_file() or not (ROOT / "render/node_modules/typescript").exists():
             self.skipTest("renderer dependencies unavailable")
         code = r'''
