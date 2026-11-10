@@ -44,14 +44,27 @@ export const Thumbnail: React.FC<ThumbnailProps> = (props) => {
   }
   let offset = 0;
   const collage = (props.srcs ?? []).length > 1 ? props.srcs! : null;
+  // A lineup: portrait cards side by side over a blurred, darkened copy of the first still (narrow full-height
+  // strips would cut off-centre faces). Cards keep at least 42% width:height so a 9:16 still loses at most a
+  // quarter of its width; the headline overlaps their lower 200 px (chests), never the faces above.
+  const gap = 18;
+  const overlap = 200;
+  const room = Math.max(400, l.box.y - 30);
+  const cardW = collage ? (1080 - 72 - gap * (collage.length - 1)) / collage.length : 0;
+  const cardH = Math.min(room + overlap, cardW / 0.42);
+  const rowW = collage ? cardW * collage.length + gap * (collage.length - 1) : 0;
   return <AbsoluteFill style={{background: '#000'}}>
     {collage
-      // Full-height columns: each 9:16 still keeps its face (upper part) visible above the low headline.
-      ? <AbsoluteFill style={{display: 'flex', gap: 10}}>
-        {collage.map((src, i) => <div key={i} style={{flex: 1, height: '100%', overflow: 'hidden'}}>
+      ? <>
+        <AbsoluteFill style={{filter: 'blur(36px) brightness(0.45)', transform: 'scale(1.15)'}}>
+          <Img src={staticFile(collage[0])} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        </AbsoluteFill>
+        {collage.map((src, i) => <div key={i} style={{position: 'absolute', left: (1080 - rowW) / 2 + i * (cardW + gap),
+          top: 30 + room + overlap - cardH, width: cardW, height: cardH, overflow: 'hidden', borderRadius: 14,
+          border: '3px solid rgba(255,255,255,0.85)', boxShadow: '0 10px 30px rgba(0,0,0,0.6)'}}>
           <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
         </div>)}
-      </AbsoluteFill>
+      </>
       : props.src && <Img src={staticFile(props.src)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />}
     <AbsoluteFill style={{background: 'radial-gradient(ellipse, transparent 35%, rgba(0,0,0,0.5) 100%)'}} />
     {l.shade === 'low' && <AbsoluteFill style={{
