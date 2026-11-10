@@ -116,8 +116,10 @@ def package(run_dir) -> Path:
         write_report(run_dir, rights)
         if any(not c.passed and c.severity == "block" for c in rights):
             raise ValueError("Packaging requires passed source rights QA (see qa.json)")
-    if any(not c.passed and c.severity == "block" and c.id != "metadata" and not c.id.startswith("en_")
-           for c in load(run_dir, "qa").checks):
+    # Checks packaging owns (metadata, English, confidence_metadata) are recomputed below, so a corrected run can
+    # be packaged again.
+    if any(not c.passed and c.severity == "block" and c.id not in ("metadata", "confidence_metadata")
+           and not c.id.startswith("en_") for c in load(run_dir, "qa").checks):
         raise ValueError("Packaging requires a passed QA report")
     # Check deliverables before writing metadata or creating an outbox directory.
     for name in ("final.mp4", "final.srt"):

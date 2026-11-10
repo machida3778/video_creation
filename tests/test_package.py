@@ -8,7 +8,7 @@ from PIL import Image
 from vg.media import FFMPEG, load, run, save
 from vg.package import package
 from vg import qa
-from vg.schemas import Asset, Brief, Check, Line, Manifest, Publish, QAReport, Research, Script, Source
+from vg.schemas import Asset, Brief, Check, Line, Manifest, Publish, QAReport, Research, Route, Script, Source
 
 
 class PackageTests(unittest.TestCase):
@@ -153,6 +153,23 @@ class PackageTests(unittest.TestCase):
         self.assertFalse(load(self.run, "qa").passed)
         self.assertFalse((self.root / "outbox").exists())
         script.title = "修正"
+        save(self.run, "script", script)
+        self.assertTrue(package(self.run).is_dir())
+        self.assertTrue(load(self.run, "qa").passed)
+
+    def test_hedged_ranking_metadata_gate_and_recovery(self):
+        save(self.run, "qa", QAReport(checks=[Check(id="format", passed=True)]))
+        save(self.run, "route", Route(type_id="ranking", confidence=1, reason="synthetic"))
+        script = load(self.run, "script")
+        script.title = "独断で選ぶ合成ランキング"
+        save(self.run, "script", script)
+        with self.assertRaisesRegex(ValueError, "metadata"):
+            package(self.run)
+        failed = next(c for c in load(self.run, "qa").checks if c.id == "confidence_metadata")
+        self.assertFalse(failed.passed)
+        self.assertFalse((self.root / "outbox").exists())
+        # After the fix the package-owned check is recomputed instead of blocking the retry.
+        script.title = "合成ランキング、1位は？"
         save(self.run, "script", script)
         self.assertTrue(package(self.run).is_dir())
         self.assertTrue(load(self.run, "qa").passed)

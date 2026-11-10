@@ -49,7 +49,9 @@ export const Thumbnail: React.FC<ThumbnailProps> = (props) => {
   // quarter of its width; the headline overlaps their lower 200 px (chests), never the faces above.
   const gap = 18;
   const overlap = 200;
-  const room = Math.max(400, l.box.y - 30);
+  // Cards start below a ranking badge, which is opaque and would hide a face.
+  const top0 = l.badge && option.badge ? l.badge.y + l.badge.height + 12 : 30;
+  const room = Math.max(300, l.box.y - top0);
   const cardW = collage ? (1080 - 72 - gap * (collage.length - 1)) / collage.length : 0;
   const cardH = Math.min(room + overlap, cardW / 0.42);
   const rowW = collage ? cardW * collage.length + gap * (collage.length - 1) : 0;
@@ -60,7 +62,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = (props) => {
           <Img src={staticFile(collage[0])} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
         </AbsoluteFill>
         {collage.map((src, i) => <div key={i} style={{position: 'absolute', left: (1080 - rowW) / 2 + i * (cardW + gap),
-          top: 30 + room + overlap - cardH, width: cardW, height: cardH, overflow: 'hidden', borderRadius: 14,
+          top: top0 + room + overlap - cardH, width: cardW, height: cardH, overflow: 'hidden', borderRadius: 14,
           border: '3px solid rgba(255,255,255,0.85)', boxShadow: '0 10px 30px rgba(0,0,0,0.6)'}}>
           <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
         </div>)}

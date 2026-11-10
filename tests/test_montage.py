@@ -271,7 +271,7 @@ class MontageTests(unittest.TestCase):
         hedges = ["独断で決めた最強ランキング", "根拠はありません", "根拠は、\nないはずでした", "根拠なしの最強",
                   "根拠は特にありません", "勝手にランキング", "個人的な順位", "個人の見解です", "主観です",
                   "異論は認める", "諸説あり", "あくまで目安", "あくまでネタです", "私的ランキング",
-                  "登録者数は人気の物差しのひとつです"]
+                  "このランキングはネタです", "ネタとして楽しんでね", "登録者数は人気の物差しのひとつです"]
         for text in hedges:
             with self.subTest(text=text):
                 self.script.lines[0].text = text
@@ -279,7 +279,8 @@ class MontageTests(unittest.TestCase):
                 check = qa.check_confidence(self.root)
                 self.assertFalse(check.passed)
                 self.assertIn("line title", check.detail)
-        for fine in ("最強ランキング", "根拠のある数字", "第1位は架空一", "勝負の行方", "自主観測の精度ランキング"):
+        for fine in ("最強ランキング", "根拠のある数字", "第1位は架空一", "勝負の行方", "自主観測の精度ランキング",
+                     "第1位は定番の寿司ネタです", "寿司ネタとして人気"):
             with self.subTest(text=fine):
                 self.script.lines[0].text = fine
                 media.save(self.root, "script", self.script)
@@ -320,10 +321,17 @@ class MontageTests(unittest.TestCase):
             check = qa.check_confidence(self.root, metadata_only=metadata_only)
             self.assertTrue(check.passed, check.detail)
             self.assertEqual(check.id, "confidence_metadata" if metadata_only else "confidence")
+        for description in ("本文。順位は独断です。", "順位は独断です。 https://example.invalid/details"):
+            media.save(self.root, "publish", Publish(
+                title="最強ランキング", description=description, hashtags=["#a", "#b", "#c"],
+                platforms=["youtube_shorts"], synthetic_media=False))
+            with self.subTest(description=description):
+                self.assertFalse(qa.check_confidence(self.root, metadata_only=True).passed)
+        # Source-list entries are not prose.
         media.save(self.root, "publish", Publish(
-            title="最強ランキング", description="本文。順位は独断です。", hashtags=["#a", "#b", "#c"],
-            platforms=["youtube_shorts"], synthetic_media=False))
-        self.assertFalse(qa.check_confidence(self.root, metadata_only=True).passed)
+            title="最強ランキング", description="本文\n\n出典\n- 独断と偏見の調査 https://example.invalid/s",
+            hashtags=["#a", "#b", "#c"], platforms=["youtube_shorts"], synthetic_media=False))
+        self.assertTrue(qa.check_confidence(self.root, metadata_only=True).passed)
         # Other types are not rankings.
         self.route("trivia_explainer")
         self.assertEqual(qa.check_confidence(self.root).detail, "not a ranking")

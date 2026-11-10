@@ -296,7 +296,8 @@ HEDGES = re.compile(
     rf"|根拠[はがの]?{_GAP}(?:特に|全く|まったく|一切|何も)?{_GAP}(?:な[いし]|無[いし]|ありません|ゼロ)"
     r"|個人(?:的|の(?:感想|意見|好み|見解|主観))|(?<!自)主観|私的な?(?:ランキング|順位)"
     r"|異論(?:は)?(?:認め|あり|歓迎)|諸説あり|参考程度|真に受け|お遊び"
-    r"|あくまで(?:も)?(?:個人|一例|目安|参考|主観|私|ネタ)|物差しの(?:ひと|一)つ|ネタとして|ネタです")
+    r"|あくまで(?:も)?(?:個人|一例|目安|参考|主観|私|ネタ)|物差しの(?:ひと|一)つ"
+    r"|(?:ランキング|順位|この動画)は(?:ただの|完全な|完全に)?ネタ|ネタとして(?:楽し|見|お楽しみ|ご覧)")
 # Storyboard prop keys drawn as text: labels, cards, rank cards and their scroll items, sources.
 TEXT_KEYS = {"text", "name", "sub", "label", "value", "header"}
 
@@ -321,14 +322,23 @@ def _drawn(value):
             yield from _drawn(item)
 
 
+_URL = re.compile(r"https?://\S+")
+
+
 def _without_credits(run_dir: Path, text: str) -> str:
-    """A description without the required credit and source lines: a source video titled 「独断と偏見で…」 must
-    still be credited verbatim."""
+    """A description without the required credit lines and source-list entries (a source video titled 「独断と偏見で…」
+    must still be credited verbatim); URLs are removed from other lines, whose prose is still checked."""
     credits = set()
     if (run_dir / "assets" / "manifest.json").is_file():
         credits = {line.strip() for asset in load(run_dir, "manifest").assets if asset.credit
                    for line in asset.credit.splitlines() if line.strip()}
-    return "\n".join(line for line in text.splitlines() if line.strip() not in credits and "http" not in line)
+    kept = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped in credits or (stripped[:1] in ("-", "・", "•") and _URL.search(stripped)):
+            continue
+        kept.append(_URL.sub("", line))
+    return "\n".join(kept)
 
 
 def ranking_texts(run_dir, *, metadata_only: bool = False) -> list[tuple[str, str]]:
