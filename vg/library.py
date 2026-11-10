@@ -127,7 +127,7 @@ def add_image(run_dir: Path, source: str, *, asset_id: str, license_id: str, sub
     if not ID_PATTERN.match(asset_id):
         raise ValueError(f"asset id must match {ID_PATTERN.pattern}")
     url = guideline or spec.get("url")
-    if not url:
+    if not url and not spec.get("guideline_optional"):
         raise ValueError(f"licence {license_id} needs --guideline <URL of the published guideline>")
     kind = "video" if at is not None else "image"
     crop_box = parse_crop(crop)

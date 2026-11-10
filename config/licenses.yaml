@@ -28,3 +28,15 @@ licenses:
     conditions:
       - ガイドラインが広告付き動画での利用を認めていることを確認し、その URL を --guideline に渡す
       - ガイドラインが求める表記（元動画、チャンネル名、タグ）をすべて満たす
+  - id: creator_open
+    name: 公開動画の静止画（切り抜きガイドラインを公開していないクリエイター、出典明記）
+    url: null             # no guideline exists; used by the channel owner's decision (2026-11-10)
+    guideline_optional: true
+    kinds: [video]
+    commercial_ok: true
+    credit: "元動画: {title}\n{url}"
+    credit_first: true
+    conditions:
+      - クリエイターがガイドラインを公開していないときだけ使う。公開していればそのガイドラインに従う（事前登録が必要なら登録後に creator_clip で）
+      - 本人の公開動画からだけ取る（メンバー限定・有料配信は不可）。元動画の題名と URL を説明欄の先頭に書く
+      - 本人のイメージを損なう編集や、公式と誤認させる表現をしない。本人・権利者から削除の依頼があれば従う

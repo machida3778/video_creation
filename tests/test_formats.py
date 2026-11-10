@@ -223,6 +223,17 @@ class ClipLicenceTests(unittest.TestCase):
         self.assertEqual(cropped.params["crop"]["fractions"], [0.8, 0.4, 0.6])
         self.assertEqual(asset.params["at"], 12.5)
         self.assertEqual(asset.license_url, "https://hololivepro.com/terms/")
+        # Creators without a published guideline (creator_open): stills from their videos, no guideline URL,
+        # credited first like the clip licences; an image file is not accepted under it.
+        with patch.object(library, "_video_meta", return_value=meta), \
+                patch.object(library, "_still_from_video", side_effect=fake_still):
+            open_still = library.add_image(self.run, meta["url"], asset_id="scene3", license_id="creator_open",
+                                           subject="s", at=12.5)
+        self.assertIsNone(open_still.license_url)
+        self.assertTrue(open_still.commercial_ok and open_still.params["credit_first"])
+        self.assertEqual(open_still.credit, "元動画: 配信タイトル\nhttps://www.youtube.com/watch?v=abc")
+        with self.assertRaisesRegex(ValueError, "--at"):
+            library.add_image(self.run, str(self.image), asset_id="x", license_id="creator_open", subject="s")
 
 
 if __name__ == "__main__":
