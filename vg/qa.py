@@ -524,7 +524,8 @@ def check_english(run_dir) -> list[Check]:
     def fresh():
         marker = json.loads((directory / "en/build.json").read_text())
         voice = registry.load_voices()[marker["voice_id"]]
-        if marker["fingerprint"] != english.fingerprint(directory, voice):
+        if marker["fingerprint"] not in (english.fingerprint(directory, voice),
+                                         english.fingerprint(directory, voice, legacy=True)):
             raise ValueError("English outputs stale; rerun vg en after input changes")
         return "English outputs match current inputs"
 

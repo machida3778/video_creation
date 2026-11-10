@@ -162,13 +162,31 @@ class EnglishMediaTests(unittest.TestCase):
             self.assertTrue(any(a.id == "ja" for a in media.load(directory, "manifest").assets))
         english.generate_many([self.directory, other], tts=stub)
         self.assertEqual(stub.call_count, 1)
-        # Metadata edits refit without reloading the TTS model.
+        # Title/description edits (e.g. a credit for a new cover still) do not touch the dub or captions.
+        def fresh():
+            return next(c for c in qa.check_english(self.directory) if c.id == "en_fresh").passed
         spec = media.load(self.directory, "en")
         spec.title = "Another hook?"
+        spec.description += "\nExtra note"
         media.save(self.directory, "en", spec)
-        self.assertFalse(next(c for c in qa.check_english(self.directory) if c.id == "en_fresh").passed)
+        self.assertTrue(fresh())
+        # Builds stamped before v2 (key over the whole en.json) stay fresh until an input changes.
+        marker = self.directory / "en/build.json"
+        stamp = json.loads(marker.read_text())
+        voice = registry.load_voices()[stamp["voice_id"]]
+        self.assertEqual(stamp["fingerprint"], english.fingerprint(self.directory, voice))
+        legacy = english.fingerprint(self.directory, voice, legacy=True)
+        self.assertNotEqual(legacy, stamp["fingerprint"])
+        marker.write_text(json.dumps(stamp | {"fingerprint": legacy}))
+        self.assertTrue(fresh())
+        english.generate(self.directory, tts=stub)
+        self.assertEqual(json.loads(marker.read_text())["fingerprint"], legacy)  # accepted, not rebuilt
+        marker.write_text(json.dumps(stamp | {"fingerprint": "0" * 64}))
+        self.assertFalse(fresh())
+        # A stale build refits without reloading the TTS model.
         english.generate(self.directory, tts=stub)
         self.assertEqual(stub.call_count, 1)
+        self.assertTrue(fresh())
         # Only the edited narration is synthesized on a resumed build.
         spec.lines[1].text = "A changed line."
         media.save(self.directory, "en", spec)

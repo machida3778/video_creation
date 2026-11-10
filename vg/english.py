@@ -105,11 +105,17 @@ def synthesize(jobs, *, cpu=False):
                            f"--spec {shlex.quote(assets.remote(spec))}", 1024 if cpu else 2048)
 
 
-def fingerprint(directory, voice):
-    """Invalidate fitting after edits/rerenders; large media are identified by stat."""
+def fingerprint(directory, voice, *, english=None, legacy: bool = False):
+    """Invalidate fitting after edits/rerenders; large media are identified by stat. The English title and
+    description do not change the dub or captions (v2), so adding a credit to the description keeps the build
+    fresh; `legacy` computes the v1 key of builds made before 2026-11-10, which hashed the whole en.json.
+    `english`: an English spec to use instead of RUN/en.json (to verify an older build against its inputs)."""
     directory = Path(directory)
-    digest = hashlib.sha256(b"english-v1")
-    for name in ("en", "script", "timings", "timeline"):
+    digest = hashlib.sha256(b"english-v1" if legacy else b"english-v2")
+    english = load(directory, "en") if english is None else english
+    digest.update((english.model_dump_json() if legacy
+                   else english.model_dump_json(exclude={"title", "description"})).encode())
+    for name in ("script", "timings", "timeline"):
         digest.update(load(directory, name).model_dump_json().encode())
     digest.update(voice.model_dump_json().encode())
     timeline = load(directory, "timeline")
@@ -140,7 +146,8 @@ def generate_many(directories, *, tts=None, cpu=False):
         key = fingerprint(directory, voice)
         marker = output / "build.json"
         previous = json.loads(marker.read_text()) if marker.is_file() else {}
-        if (previous.get("fingerprint") == key and (directory / "dub_en.m4a").is_file()
+        if (previous.get("fingerprint") in (key, fingerprint(directory, voice, legacy=True))
+                and (directory / "dub_en.m4a").is_file()
                 and (directory / "final_en.srt").is_file() and (output / "timings.json").is_file()):
             continue
         marker.unlink(missing_ok=True)
