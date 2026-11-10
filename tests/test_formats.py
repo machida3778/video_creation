@@ -203,8 +203,9 @@ class ClipLicenceTests(unittest.TestCase):
         self.assertTrue(named.is_file())
 
     def test_video_still_records_the_source_title_and_url(self):
-        def fake_still(url, at, target):
+        def fake_still(url, at, target, crop=None):
             Image.new("RGB", (1920, 1080)).save(target)
+            return {"x": 1, "y": 2, "w": 3, "h": 4, "frame": [1920, 1080]} if crop else None
         meta = {"title": "配信タイトル", "url": "https://www.youtube.com/watch?v=abc", "channel": "ch", "duration": 600}
         with patch.object(library, "_video_meta", return_value=meta), \
                 patch.object(library, "_still_from_video", side_effect=fake_still):
@@ -214,6 +215,12 @@ class ClipLicenceTests(unittest.TestCase):
                 library.add_image(self.run, meta["url"], asset_id="late", license_id="hololive_clip",
                                   subject="s", at=601)
         self.assertEqual(asset.credit, "元動画: 配信タイトル\nhttps://www.youtube.com/watch?v=abc")
+        self.assertNotIn("crop", asset.params)
+        with patch.object(library, "_video_meta", return_value=meta), \
+                patch.object(library, "_still_from_video", side_effect=fake_still):
+            cropped = library.add_image(self.run, meta["url"], asset_id="scene2", license_id="hololive_clip",
+                                        subject="s", at=12.5, crop="0.8,0.4,0.6")
+        self.assertEqual(cropped.params["crop"]["fractions"], [0.8, 0.4, 0.6])
         self.assertEqual(asset.params["at"], 12.5)
         self.assertEqual(asset.license_url, "https://hololivepro.com/terms/")
 

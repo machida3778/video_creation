@@ -183,6 +183,28 @@ def even_times(duration: float, count: int, skip_start: float = 0.0) -> list[dic
     return [{"t": round(skip_start + usable * (i + 0.5) / count, 2), "value": None} for i in range(count)]
 
 
+def choose_moments(signal: list[dict], duration: float, count: int, *, window: tuple[float, float] | None = None,
+                   min_gap: float | None = None, skip_start: float = 120.0) -> tuple[str, list[dict]]:
+    """("signal" | "window" | "even", moments). A window (e.g. the opening talk of a game stream, where the
+    avatar is large) limits both the signal and the even fallback; otherwise long streams skip their opening
+    waiting screen."""
+    if window:
+        start, end = max(0.0, window[0]), min(duration or window[1], window[1])
+        if end <= start:
+            raise ValueError(f"window {window} lies outside the video ({duration:.0f} s)")
+        inside = [s for s in signal if start <= (s["start"] + s["end"]) / 2 <= end]
+        if not inside:
+            return "window", [{"t": round(start + (end - start) * (i + 0.5) / count, 2), "value": None}
+                              for i in range(count)]
+        gap = min_gap if min_gap is not None else max(5.0, (end - start) / (count * 3))
+        return "signal", peaks(inside, count, min_gap=gap)
+    skip = skip_start if duration > skip_start * 4 else 0.0
+    if not signal:
+        return "even", even_times(duration, count, skip)
+    gap = min_gap if min_gap is not None else max(20.0, duration / (count * 3))
+    return "signal", peaks(signal, count, min_gap=gap, skip_start=skip)
+
+
 # ---------------------------------------------------------------- frames
 def stream_url(url: str) -> str:
     result = run(["uvx", "yt-dlp", "--no-playlist", "-g", "-f", "bv*[height<=720][ext=mp4]/bv*[height<=720]/b",
@@ -227,7 +249,8 @@ def contact_sheet(frames: list[tuple[int, dict, Image.Image | None]], title: str
 
 # ---------------------------------------------------------------- main
 def moments_for(url: str, out_dir: Path, *, count: int = 9, chat: bool = False, min_gap: float | None = None,
-                skip_start: float = 120.0, frames: bool = True) -> dict:
+                skip_start: float = 120.0, frames: bool = True,
+                window: tuple[float, float] | None = None) -> dict:
     meta = video_meta(url)
     duration = float(meta["duration"] or 0)
     signal, kind = (meta.pop("heatmap") or []), "heatmap"
@@ -237,12 +260,9 @@ def moments_for(url: str, out_dir: Path, *, count: int = 9, chat: bool = False, 
         signal = fetch_heatmap(meta["id"])
     if not signal and chat and meta.get("was_live"):
         signal, kind = fetch_chat(meta["url"], duration), "chat"
-    gap = min_gap if min_gap is not None else max(20.0, duration / (count * 3))
-    skip = skip_start if duration > skip_start * 4 else 0.0  # long streams open with a waiting screen
-    if signal:
-        moments = peaks(signal, count, min_gap=gap, skip_start=skip)
-    else:
-        kind, moments = "even", even_times(duration, count, skip)
+    choice, moments = choose_moments(signal, duration, count, window=window, min_gap=min_gap,
+                                     skip_start=skip_start)
+    kind = kind if choice == "signal" else choice
     directory = Path(out_dir) / meta["id"]
     directory.mkdir(parents=True, exist_ok=True)
     result = {**meta, "signal": kind, "moments": moments}
@@ -258,14 +278,14 @@ def moments_for(url: str, out_dir: Path, *, count: int = 9, chat: bool = False, 
 
 
 def collect(source: str, out_dir: Path, *, videos: int = 2, count: int = 9, chat: bool = False,
-            frames: bool = True) -> list[dict]:
+            frames: bool = True, window: tuple[float, float] | None = None) -> list[dict]:
     urls = [v["url"] for v in channel_videos(source, videos)] if is_channel(source) else [source]
     if not urls:
         raise ValueError(f"no public video found on {source}")
     results = []
     for url in urls:
         try:
-            results.append(moments_for(url, out_dir, count=count, chat=chat, frames=frames))
+            results.append(moments_for(url, out_dir, count=count, chat=chat, frames=frames, window=window))
         except (ValueError, RuntimeError) as exc:
             results.append({"url": url, "error": str(exc)})
     out = Path(out_dir)
