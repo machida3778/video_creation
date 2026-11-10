@@ -26,6 +26,7 @@
   vg reference add <URL|file> --id ID [--replace] | show ID   fetch/measure a reference video (local/formats/ID)
   vg format list | show ID | validate ID | preview ID [--header TEXT]   formats learned from references
   vg image add RUN SOURCE --id ID --license L --subject S [--at SEC] [--guideline URL]   licensed outside image
+  vg moments VIDEO|CHANNEL --out DIR [--videos 2] [--n 9] [--chat] [--no-frames]   most-replayed/chat peaks + frame sheet
   vg feedback RUN "<text>" [--variant vN] | vg feedback RUN --show
   vg smoke                          fixed three-line run end to end (no GPU)
 <run> is a run/variant path, a directory name under runs/, "latest", or "<run>:v2".
@@ -388,6 +389,13 @@ def main(argv: list[str] | None = None) -> int:
     fmt_preview = fmt.add_parser("preview")
     fmt_preview.add_argument("id")
     fmt_preview.add_argument("--header", help="sample header text")
+    moments = sub.add_parser("moments", help="peaks of a public video (most replayed / chat) with a frame sheet")
+    moments.add_argument("source", help="video URL, or channel URL (newest public uploads)")
+    moments.add_argument("--out", required=True, help="directory for <video id>/sheet.jpg and moments.json")
+    moments.add_argument("--videos", type=int, default=2, help="videos per channel")
+    moments.add_argument("--n", type=int, default=9, help="moments per video")
+    moments.add_argument("--chat", action="store_true", help="fall back to live-chat density (slow)")
+    moments.add_argument("--no-frames", action="store_true", help="times only, no contact sheet")
     image = sub.add_parser("image", help="add an official or licensed image to a run's manifest")
     image.add_argument("image_cmd", choices=["add"])
     image.add_argument("run")
@@ -498,6 +506,21 @@ def main(argv: list[str] | None = None) -> int:
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             print(f"{a.cmd}: {exc}", file=sys.stderr)
             return 1
+    if a.cmd == "moments":
+        from .moments import collect
+        try:
+            results = collect(a.source, Path(a.out), videos=a.videos, count=a.n, chat=a.chat,
+                              frames=not a.no_frames)
+        except (ValueError, FileNotFoundError, RuntimeError) as exc:
+            print(f"moments: {exc}", file=sys.stderr)
+            return 1
+        for r in results:
+            if "error" in r:
+                print(f"{r['url']}: {r['error']}")
+                continue
+            times = ", ".join(f"#{m.get('n', i + 1)} {m['t']:.0f}s" for i, m in enumerate(r["moments"]))
+            print(f"{r['url']}  [{r['signal']}]  {r['title'][:50]}\n  {times}\n  sheet: {r.get('sheet', '-')}")
+        return 0
     if a.cmd == "image":
         from .library import add_image
         try:
